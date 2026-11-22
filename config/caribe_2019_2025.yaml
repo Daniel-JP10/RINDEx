@@ -82,6 +82,17 @@ evidencia:
     medio_max_proporcion_repetidos: 0.50
     medio_max_filas_atipicas: 1
 
+geografia:
+  url_mgn: "https://geoportal.dane.gov.co/mparcgis/rest/services/Divipola/Serv_DIVIPOLA_MGN_2025/FeatureServer/317/query"
+  version_mgn: "MGN 2025 (Geoportal DANE DIVIPOLA)"
+  licencia: "Datos Abiertos DANE - Creative Commons Attribution 4.0 International (CC BY 4.0)"
+  archivo_local: "data/raw/geo/mgn_2025_municipios_caribe.geojson"
+  topojson_salida: "web/public/data/geo/caribe.topojson"
+  epsilon_simplificacion: 0.001
+  cuantizacion: 100000
+  max_tamano_kb: 600.0
+  max_diferencia_area_pct: 3.0
+
 mapeo_desagregacion:
   "Arroz riego":
     cultivo: "Arroz"

@@ -131,6 +131,19 @@ class ConfigEvidencia:
 
 
 @dataclass(frozen=True)
+class ConfigGeografia:
+    url_mgn: str
+    version_mgn: str
+    licencia: str
+    archivo_local: str
+    topojson_salida: str
+    epsilon_simplificacion: float
+    cuantizacion: int
+    max_tamano_kb: float
+    max_diferencia_area_pct: float
+
+
+@dataclass(frozen=True)
 class MapeoDesagregacionItem:
     cultivo: str
     sistema: str
@@ -157,6 +170,7 @@ class ConfiguracionEdicion:
     clima: ConfigClima
     priorizacion: ConfigPriorizacion
     evidencia: ConfigEvidencia
+    geografia: ConfigGeografia
     mapeo_desagregacion: dict[str, MapeoDesagregacionItem]
     limites_plausibilidad_rendimiento: dict[str, LimitePlausibilidad]
 
@@ -277,6 +291,33 @@ def _validar_evidencia(raw_ev: Any) -> ConfigEvidencia:
     )
 
 
+def _validar_geografia(raw_geo: Any) -> ConfigGeografia:
+    if not isinstance(raw_geo, dict):
+        raw_geo = {}
+    url_def = (
+        "https://geoportal.dane.gov.co/mparcgis/rest/services/"
+        "Divipola/Serv_DIVIPOLA_MGN_2025/FeatureServer/317/query"
+    )
+    return ConfigGeografia(
+        url_mgn=str(raw_geo.get("url_mgn", url_def)),
+        version_mgn=str(raw_geo.get("version_mgn", "MGN 2025 (Geoportal DANE DIVIPOLA)")),
+        licencia=str(
+            raw_geo.get(
+                "licencia",
+                "Datos Abiertos DANE - Creative Commons Attribution 4.0 International (CC BY 4.0)",
+            )
+        ),
+        archivo_local=str(
+            raw_geo.get("archivo_local", "data/raw/geo/mgn_2025_municipios_caribe.geojson")
+        ),
+        topojson_salida=str(raw_geo.get("topojson_salida", "web/public/data/geo/caribe.topojson")),
+        epsilon_simplificacion=float(raw_geo.get("epsilon_simplificacion", 0.001)),
+        cuantizacion=int(raw_geo.get("cuantizacion", 100000)),
+        max_tamano_kb=float(raw_geo.get("max_tamano_kb", 600.0)),
+        max_diferencia_area_pct=float(raw_geo.get("max_diferencia_area_pct", 3.0)),
+    )
+
+
 def validar_diccionario_config(datos: dict[str, Any]) -> ConfiguracionEdicion:
     _verificar_campos(datos, CAMPOS_RAIZ_OBLIGATORIOS)
     _verificar_campos(datos["anios"], CAMPOS_ANIOS_OBLIGATORIOS, prefijo="anios.")
@@ -353,6 +394,7 @@ def validar_diccionario_config(datos: dict[str, Any]) -> ConfiguracionEdicion:
 
     priorizacion = _validar_priorizacion(datos.get("priorizacion"))
     evidencia = _validar_evidencia(datos.get("evidencia"))
+    geografia = _validar_geografia(datos.get("geografia"))
     mapeo = _validar_mapeo_desagregacion(datos["mapeo_desagregacion"])
     limites = _validar_limites_plausibilidad(
         datos["limites_plausibilidad_rendimiento"],
@@ -372,6 +414,7 @@ def validar_diccionario_config(datos: dict[str, Any]) -> ConfiguracionEdicion:
         clima=clima,
         priorizacion=priorizacion,
         evidencia=evidencia,
+        geografia=geografia,
         mapeo_desagregacion=mapeo,
         limites_plausibilidad_rendimiento=limites,
     )
