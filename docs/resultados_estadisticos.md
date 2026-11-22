@@ -4,7 +4,7 @@
 - **Región**: Caribe
 - **Umbral base de elegibilidad**: `500 ha` y `4` años con dato
 - **Semilla bootstrap**: `2026` (`5.000` réplicas principales; `1.000` en variantes de robustez)
-- **Tiempo total de ejecución**: `51,79 s`
+- **Tiempo total de ejecución**: `56,38 s`
 
 ## 1. Clasificación climática anual ENSO (ONI de NOAA, 2019-2025)
 
@@ -22,11 +22,11 @@
 
 | Hipótesis | Familia | n | Estadístico | p | p ajustado | Efecto | Intervalo de 95 % | Decisión | Robustez |
 | :--- | :---: | ---: | :--- | ---: | ---: | :--- | :---: | :--- | :--- |
-| H1 Tendencia (Arroz) | `H1` | 86 | W = 1.540,50 | 0,7030 | 0,7938 | mediana pendiente (t/ha/anio): 0,0000 | [-0,0231; 0,0248] | equivalencia practica (+/- 1 % anual) | **firme** |
-| H1 Tendencia (Maíz) | `H1` | 180 | W = 4.659,50 | 0,0183 | 0,0549 | mediana pendiente (t/ha/anio): 0,0000 | [-0,0183; 0,0000] | equivalencia practica (+/- 1 % anual) | **fragil** (umbral_300ha, sin_2019, sin_2021, sin_2022, sin_2023, sin_2025) |
-| H1 Tendencia (Yuca) | `H1` | 172 | W = 3.363,00 | 0,3969 | 0,7938 | mediana pendiente (t/ha/anio): 0,0000 | [0,0000; 0,0000] | equivalencia practica (+/- 1 % anual) | **firme** |
+| H1 Tendencia (Arroz) | `H1` | 86 | W = 1.540,50 | 0,7030 | 0,7938 | mediana pendiente (t/ha/anio): 0,0000 | [-0,0231; 0,0248] | la tendencia no es medible en las series con valores repetidos | **firme** |
+| H1 Tendencia (Maíz) | `H1` | 180 | W = 4.659,50 | 0,0183 | 0,0549 | mediana pendiente (t/ha/anio): 0,0000 | [-0,0183; 0,0000] | la tendencia no es medible en las series con valores repetidos | **fragil** (umbral_300ha, sin_2019, sin_2021, sin_2022, sin_2023, sin_2025, sin_poco_informativas_D7) |
+| H1 Tendencia (Yuca) | `H1` | 172 | W = 3.363,00 | 0,3969 | 0,7938 | mediana pendiente (t/ha/anio): 0,0000 | [0,0000; 0,0000] | la tendencia no es medible en las series con valores repetidos | **firme** |
 | H2 Brecha tecnologica en maiz (tecnificado vs tradicional) | `H2` | 60 | W = 27,00 | < 0,0001 | < 0,0001 | razon Hodges-Lehmann: 1,6729 | [1,5483; 1,8017] | diferencia significativa (tecnificado > tradicional) | **firme** |
-| H3 Arroz (riego vs secano_mecanizado) | `H3` | 5 | W = 0,00 | 0,0625 | 0,0625 | razon Hodges-Lehmann: 1,1377 | [1,0609; 1,2133] | sin evidencia de diferencia | **fragil** (umbral_300ha, sin_2019, municipio_anio) |
+| H3 Arroz (riego vs secano_mecanizado) | `H3` | 5 | W = 0,00 | 0,0625 | 0,0625 | razon Hodges-Lehmann: 1,1377 | [1,0609; 1,2133] | insuficiente (n < 6, D6) | **insuficiente** |
 | H3 Arroz (riego vs secano_manual) | `H3` | 10 | W = 0,00 | 0,0020 | 0,0039 | razon Hodges-Lehmann: 2,0190 | [1,6288; 2,7345] | diferencia significativa (razon mayor a 1) | **firme** |
 | H3 Arroz (secano_mecanizado vs secano_manual) | `H3` | 31 | W = 0,00 | < 0,0001 | < 0,0001 | razon Hodges-Lehmann: 1,6174 | [1,4805; 1,8183] | diferencia significativa (razon mayor a 1) | **firme** |
 | H4 Diferencia departamental (Arroz) | `H4` | 86 | H = 34,61 | < 0,0001 | < 0,0001 | epsilon_cuadrado: 0,4071 | [0,2768; 0,5861] | diferencia interdepartamental significativa | **firme** |
@@ -49,25 +49,37 @@
 | E2 Exploratoria: tasa no cosechada 2022-2025 vs 2019-2021 (Maíz) | `E2` | 143 | W = 4.760,00 | 0,6134 | 0,9063 | diferencia HL (pp): 0,4660 | [-1,1435; 2,0778] | sin evidencia de asociacion exploratoria | **firme** |
 | E2 Exploratoria: tasa no cosechada 2022-2025 vs 2019-2021 (Yuca) | `E2` | 138 | W = 2.784,00 | < 0,0001 | 0,0004 | diferencia HL (pp): 4,6539 | [2,6657; 6,7138] | asociacion exploratoria significativa (FDR < 0,05) | **firme** |
 
+### 2.1. Sensibilidad adicional post-hoc (D7: H1 y H5 excluyendo series poco informativas)
+
+| Hipótesis (sensibilidad post-hoc D7) | Familia | n (sin poco informativas) | Estadístico | p | p ajustado | Efecto | Intervalo de 95 % | Decisión en sensibilidad D7 |
+| :--- | :---: | ---: | :--- | ---: | ---: | :--- | :---: | :--- |
+| H1 Tendencia (Arroz) | `H1` | 79 | W = 1.388,50 | 0,8472 | 0,9007 | mediana pendiente (t/ha/anio): 0,0000 | [-0,0272; 0,0313] | sin evidencia de tendencia |
+| H1 Tendencia (Maíz) | `H1` | 167 | W = 4.416,00 | 0,0141 | 0,0422 | mediana pendiente (t/ha/anio): -0,0016 | [-0,0231; 0,0000] | tendencia negativa significativa |
+| H1 Tendencia (Yuca) | `H1` | 112 | W = 2.212,50 | 0,4504 | 0,9007 | mediana pendiente (t/ha/anio): 0,0000 | [-0,0659; 0,0581] | la tendencia no es medible en las series con valores repetidos |
+| H5 Variabilidad interanual CV (Friedman 3 cultivos) | `H5` | 46 | chi2_F = 0,39 | 0,8223 | 0,8223 | W de Kendall: 0,0043 | [0,0005; 0,0940] | sin evidencia de diferencia de variabilidad |
+| H5 Variabilidad CV (Arroz vs Maíz) | `H5` | 46 | W = 462,00 | 0,3976 | 0,9700 | diferencia HL de CV: -0,0190 | [-0,0630; 0,0207] | sin evidencia de diferencia de variabilidad |
+| H5 Variabilidad CV (Arroz vs Yuca) | `H5` | 46 | W = 449,00 | 0,3233 | 0,9700 | diferencia HL de CV: -0,0302 | [-0,0904; 0,0275] | sin evidencia de diferencia de variabilidad |
+| H5 Variabilidad CV (Maíz vs Yuca) | `H5` | 46 | W = 524,00 | 0,8626 | 0,9700 | diferencia HL de CV: 0,0040 | [-0,0443; 0,0510] | sin evidencia de diferencia de variabilidad |
+
 ## 3. Interpretación por familia de hipótesis (lenguaje de asociación observada)
 
 ### H1. Tendencia temporal del rendimiento municipal (2019-2025)
-En los municipios elegibles de la Región Caribe la pendiente mediana de Theil-Sen es 0,0000 t/ha/año en los tres cultivos y no supera el umbral de significancia tras la corrección de Holm (con intervalos de confianza relativos contenidos dentro de la banda de +/- 1 % anual en el escenario base); en arroz y yuca el resultado es firme, mientras que en maíz es frágil porque la ligera pendiente negativa alcanza significancia estadística al ampliar la muestra a 300 ha o al excluir años individuales.
+En los municipios elegibles de la Región Caribe la pendiente mediana de Theil-Sen es 0,0000 t/ha/año debido a la alta proporción de años consecutivos con rendimiento administrativo repetido (que genera pendientes exactamente nulas descartadas por Wilcoxon con `zero_method='wilcox'`); conforme a D7, la tendencia no es medible en las series con valores repetidos y no debe interpretarse como equivalencia práctica, siendo además frágil en maíz (donde al excluir las series poco informativas o ampliar a 300 ha emerge una ligera pendiente negativa estadísticamente significativa).
 
 ### H2. Brecha tecnológica observada en maíz (tecnificado vs. tradicional)
 En los municipios elegibles que registran ambos sistemas de maíz en los mismos años (60 municipios, 368 pares municipio-año), el sistema tecnificado se asocia de forma firme con un rendimiento superior al tradicional, con una razón de Hodges-Lehmann de 1,67 veces (IC 95 %: 1,55 a 1,80; razón mediana 1,66) que se mantiene en todas las variantes de sensibilidad.
 
 ### H3. Diferencias observadas entre sistemas en arroz (y nota descriptiva en yuca)
-En las comparaciones pareadas por municipio corregidas con Holm (D1 y D2), tanto el arroz bajo riego (razón HL = 2,02; firme) como el secano mecanizado (razón HL = 1,62; firme) se asocian con rendimientos significativamente mayores que el secano manual, mientras que el contraste directo entre riego y secano mecanizado cuenta con solo 5 municipios elegibles con par (frágil por tamaño muestral en nivel municipal frente a municipio-año o umbral de 300 ha) y el complemento de Friedman sobre las 19 tripletas completas arroja chi2 = 36,11 (p = < 0,0001, W = 0,9501). De forma descriptiva en yuca (cuya desagregación responde al destino comercial), la yuca en fresco presenta un rendimiento regional ponderado de 10,70 t/ha (mediana municipal 10,58 t/ha en 193 municipios) frente a 17,64 t/ha en yuca industrial (mediana municipal 15,35 t/ha en 43 municipios).
+En las comparaciones pareadas por municipio corregidas con Holm (D1 y D2), tanto el arroz bajo riego (razón HL = 2,02; firme) como el secano mecanizado (razón HL = 1,62; firme) se asocian con rendimientos significativamente mayores que el secano manual, mientras que el contraste directo entre riego y secano mecanizado cuenta con solo 5 municipios elegibles con par y se clasifica como **insuficiente** según D6 (dado que con n < 6 el valor p bilateral exacto mínimo en Wilcoxon es 0,0625 > 0,05); el complemento de Friedman sobre las 19 tripletas completas arroja chi2 = 36,11 (p = < 0,0001, W = 0,9501). De forma descriptiva en yuca (cuya desagregación responde al destino comercial), la yuca en fresco presenta un rendimiento regional ponderado de 10,70 t/ha (mediana municipal 10,58 t/ha en 193 municipios) frente a 17,64 t/ha en yuca industrial (mediana municipal 15,35 t/ha en 43 municipios).
 
 ### H4. Diferencias interdepartamentales de rendimiento del periodo
 La prueba de Kruskal-Wallis evidencia diferencias interdepartamentales estadísticamente significativas y firmes en el rendimiento municipal del periodo para arroz (épsilon cuadrado = 0,41) y maíz (épsilon cuadrado = 0,11), mientras que en yuca (épsilon cuadrado = 0,03; p ajustado = 0,5330) no se observa evidencia de diferenciación departamental.
 
 ### H5. Variabilidad interanual del rendimiento (CV) entre cultivos
-En los 76 municipios donde arroz, maíz y yuca son simultáneamente elegibles, ni la prueba ómnibus de Friedman (W de Kendall = 0,0168; p = 0,2791) ni las comparaciones pareadas de Wilcoxon con corrección de Holm muestran diferencias estadísticamente significativas en el coeficiente de variación interanual del rendimiento, resultado que se mantiene firme en todas las variantes.
+En los 76 municipios donde arroz, maíz y yuca son simultáneamente elegibles (así como en los 52 municipios que restan al excluir las series poco informativas en la sensibilidad post-hoc D7), ni la prueba ómnibus de Friedman ni las comparaciones pareadas de Wilcoxon con corrección de Holm muestran diferencias estadísticamente significativas en el coeficiente de variación interanual del rendimiento (firme).
 
 ### E1. Análisis exploratorio de asociación con el índice climático ONI (ENSO)
-En el análisis exploratorio climático (corregido por Benjamini-Hochberg), ni las correlaciones exactas de Spearman a escala regional anual (n = 7 años) con el índice ONI ni las comparaciones intramunicipales pareadas entre años La Niña (2021-2022) y años neutros (2020, 2024, 2025) muestran asociaciones estadísticamente significativas, con estabilidad firme en todas las variantes.
+En el análisis exploratorio climático (corregido por Benjamini-Hochberg), ni las correlaciones exactas de Spearman a escala regional anual (n = 7 años) con el índice ONI ni las comparaciones intramunicipales pareadas entre años La Niña (2021-2022) y años neutros (2020, 2024, 2025) muestran asociaciones estadísticamente significativas (firme). Conforme a D8, la ausencia de correlación regional con el ONI anual no descarta eventos hidrometeorológicos locales, y el pico de área no cosechada de arroz en 2021 (36.766,30 ha; 23,64 %) se describe como un episodio concentrado geográficamente sin atribución climática.
 
 ### E2. Análisis exploratorio del quiebre 2022 en la tasa de área no cosechada
 Tras excluir los municipios con área cosechada acumulada superior a la sembrada (D4), la comparación exploratoria entre 2022-2025 y 2019-2021 muestra un incremento estadísticamente significativo y firme en la tasa de área no cosechada de yuca (+4,65 puntos porcentuales; FDR = 0,0004), el cual se interpreta como desfase asociado al ciclo vegetativo largo del cultivo tras el cambio metodológico de 2022 (D3) y no como pérdida; en maíz no se observa cambio significativo (firme) y en arroz el resultado base no significativo es sensible a la exclusión de 2021 (frágil).

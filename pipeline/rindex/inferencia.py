@@ -29,30 +29,36 @@ from rindex.estadistica import (
 from rindex.limpieza import limpiar_eva
 
 ALFA_CONFIRMATORIO = 0.05
-MINIMO_UNIDADES_PRUEBA = 5
+# D6: Con n < 6 en Wilcoxon pareado, el p bilateral exacto minimo es 2/2^5 = 0,0625 > 0,05
+MINIMO_UNIDADES_PRUEBA = 6
 
 
 def _filtrar_elegibles(
     df_periodo: pd.DataFrame,
     umbral_ha: float,
     anios_minimos: int,
+    excluir_poco_informativas: bool = False,
 ) -> pd.DataFrame:
     mascara = (df_periodo["area_cosechada"] >= umbral_ha) & (
         df_periodo["anios_con_dato"] >= anios_minimos
     )
+    if excluir_poco_informativas and "serie_poco_informativa" in df_periodo.columns:
+        mascara = mascara & (~df_periodo["serie_poco_informativa"])
     return df_periodo.loc[mascara].copy()
 
 
-def evaluar_h1_tendencia(
+def _calcular_tabla_h1(
     tablas: dict[str, pd.DataFrame],
     cfg: ConfiguracionEdicion,
-    umbral_ha: float = 500.0,
-    replicas_boot: int = 5000,
+    umbral_ha: float,
+    replicas_boot: int,
+    excluir_poco_informativas: bool,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     per_eleg = _filtrar_elegibles(
         tablas["periodo_municipio_cultivo"],
         umbral_ha=umbral_ha,
         anios_minimos=cfg.parametros.anios_minimos_con_dato,
+        excluir_poco_informativas=excluir_poco_informativas,
     )
     llaves_eleg = per_eleg[["codigo_dane_municipio", "cultivo"]].drop_duplicates()
     anual_eleg = tablas["anual_municipio_cultivo"].merge(
@@ -83,7 +89,7 @@ def evaluar_h1_tendencia(
                     "cultivo": cultivo,
                     "contraste": "pendiente Theil-Sen vs 0",
                     "n": n_mpios,
-                    "n_secundario": n_mpios,
+                    "n_secundario": 0,
                     "nombre_estadistico": "W",
                     "estadistico": float("nan"),
                     "valor_p": float("nan"),
@@ -101,6 +107,7 @@ def evaluar_h1_tendencia(
             continue
 
         w_res = prueba_wilcoxon_pareada(pend_tha)
+        n_no_cero = int(np.sum(np.abs(pend_tha) > 1e-12))
         med_tha = float(np.median(pend_tha))
         med_pct = float(np.median(pend_pct))
         semilla_c = cfg.parametros.semilla_aleatoria + 10 + idx
@@ -124,7 +131,7 @@ def evaluar_h1_tendencia(
                 "cultivo": cultivo,
                 "contraste": "pendiente Theil-Sen vs 0",
                 "n": w_res.n,
-                "n_secundario": w_res.n,
+                "n_secundario": n_no_cero,
                 "nombre_estadistico": "W",
                 "estadistico": w_res.estadistico,
                 "valor_p": w_res.valor_p,
@@ -143,22 +150,77 @@ def evaluar_h1_tendencia(
     df_h1 = pd.DataFrame(filas_res)
     df_h1["valor_p_ajustado"] = ajustar_p_holm(df_h1["valor_p"].to_numpy(dtype=float))
     df_h1["metodo_ajuste"] = "Holm"
+    return df_h1, df_pendientes
+
+
+def evaluar_h1_tendencia(
+    tablas: dict[str, pd.DataFrame],
+    cfg: ConfiguracionEdicion,
+    umbral_ha: float = 500.0,
+    replicas_boot: int = 5000,
+    excluir_poco_informativas: bool = False,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    df_h1, df_pendientes = _calcular_tabla_h1(
+        tablas=tablas,
+        cfg=cfg,
+        umbral_ha=umbral_ha,
+        replicas_boot=replicas_boot,
+        excluir_poco_informativas=excluir_poco_informativas,
+    )
+
+    if not excluir_poco_informativas:
+        df_h1_d7, _ = _calcular_tabla_h1(
+            tablas=tablas,
+            cfg=cfg,
+            umbral_ha=umbral_ha,
+            replicas_boot=min(replicas_boot, cfg.parametros.bootstrap_robustez),
+            excluir_poco_informativas=True,
+        )
+        mapa_d7 = {str(f["id_hipotesis"]): f for f in df_h1_d7.to_dict(orient="records")}
+    else:
+        mapa_d7 = {}
+
+    per_cul = tablas["periodo_municipio_cultivo"]
+    tiene_poco_inf_por_cultivo: dict[str, bool] = {}
+    if "serie_poco_informativa" in per_cul.columns:
+        for c in cfg.cultivos:
+            sub_c = per_cul.loc[
+                (per_cul["cultivo"] == c) & (per_cul["area_cosechada"] >= umbral_ha)
+            ]
+            tiene_poco_inf_por_cultivo[c] = bool(sub_c["serie_poco_informativa"].any())
 
     decisiones: list[str] = []
     for fila in df_h1.to_dict(orient="records"):
+        id_h = str(fila["id_hipotesis"])
+        cultivo = str(fila["cultivo"])
+        n_m = int(fila["n"])
         p_adj = float(fila["valor_p_ajustado"])
         ef = float(fila["efecto"])
         ic_pct_l = float(fila["ic_95_sec_inf"])
         ic_pct_u = float(fila["ic_95_sec_sup"])
-        if np.isnan(p_adj):
-            decisiones.append("muestra insuficiente")
+
+        if n_m < MINIMO_UNIDADES_PRUEBA or np.isnan(p_adj):
+            decisiones.append("insuficiente (n < 6, D6)")
         elif p_adj < ALFA_CONFIRMATORIO:
-            sentido = "positiva" if ef > 0 else "negativa"
+            sentido = "positiva" if ef > 0 else ("negativa" if ef < 0 else "nula")
             decisiones.append(f"tendencia {sentido} significativa")
         elif ic_pct_l >= -1.0 and ic_pct_u <= 1.0:
-            decisiones.append("equivalencia practica (+/- 1 % anual)")
+            # D7: verificar si la aparente equivalencia se debe a series con valores repetidos
+            fila_d7 = mapa_d7.get(id_h)
+            altera_d7 = False
+            if fila_d7 is not None:
+                p_d7 = float(fila_d7["valor_p_ajustado"])
+                l_d7 = float(fila_d7["ic_95_sec_inf"])
+                u_d7 = float(fila_d7["ic_95_sec_sup"])
+                if not np.isnan(p_d7) and (p_d7 < ALFA_CONFIRMATORIO or l_d7 < -1.0 or u_d7 > 1.0):
+                    altera_d7 = True
+            if altera_d7 or tiene_poco_inf_por_cultivo.get(cultivo, False):
+                decisiones.append("la tendencia no es medible en las series con valores repetidos")
+            else:
+                decisiones.append("equivalencia practica (+/- 1 % anual)")
         else:
             decisiones.append("sin evidencia de tendencia")
+
     df_h1["decision"] = decisiones
     return df_h1, df_pendientes
 
@@ -226,7 +288,7 @@ def _evaluar_par_sistemas(
         n_primario = n_pares
         n_sec = n_mpios
 
-    if n_primario < MINIMO_UNIDADES_PRUEBA:
+    if n_primario < 2:
         return {
             "id_hipotesis": id_hipotesis,
             "hipotesis": titulo_hipotesis,
@@ -328,10 +390,11 @@ def evaluar_h2_maiz(
     df_h2 = pd.DataFrame([fila])
     df_h2["valor_p_ajustado"] = ajustar_p_holm(df_h2["valor_p"].to_numpy(dtype=float))
     df_h2["metodo_ajuste"] = "Holm"
+    n_u = int(df_h2["n"].iloc[0])
     p_adj = float(df_h2["valor_p_ajustado"].iloc[0])
     ef = float(df_h2["efecto"].iloc[0])
-    if np.isnan(p_adj):
-        df_h2["decision"] = "muestra insuficiente"
+    if n_u < MINIMO_UNIDADES_PRUEBA or np.isnan(p_adj):
+        df_h2["decision"] = "insuficiente (n < 6, D6)"
     elif p_adj < ALFA_CONFIRMATORIO and ef > 1.0:
         df_h2["decision"] = "diferencia significativa (tecnificado > tradicional)"
     elif p_adj < ALFA_CONFIRMATORIO:
@@ -387,10 +450,11 @@ def evaluar_h3_arroz(
 
     decisiones: list[str] = []
     for fila in df_h3.to_dict(orient="records"):
+        n_u = int(fila["n"])
         p_adj = float(fila["valor_p_ajustado"])
         ef = float(fila["efecto"])
-        if np.isnan(p_adj):
-            decisiones.append("muestra insuficiente")
+        if n_u < MINIMO_UNIDADES_PRUEBA or np.isnan(p_adj):
+            decisiones.append("insuficiente (n < 6, D6)")
         elif p_adj < ALFA_CONFIRMATORIO:
             sentido = "mayor" if ef > 1.0 else "menor"
             decisiones.append(f"diferencia significativa (razon {sentido} a 1)")
@@ -533,11 +597,13 @@ def evaluar_h5_variabilidad(
     cfg: ConfiguracionEdicion,
     umbral_ha: float = 500.0,
     replicas_boot: int = 5000,
+    excluir_poco_informativas: bool = False,
 ) -> pd.DataFrame:
     per_eleg = _filtrar_elegibles(
         tablas["periodo_municipio_cultivo"],
         umbral_ha=umbral_ha,
         anios_minimos=cfg.parametros.anios_minimos_con_dato,
+        excluir_poco_informativas=excluir_poco_informativas,
     )
     piv_cv = per_eleg.pivot_table(
         index="codigo_dane_municipio",
@@ -547,12 +613,13 @@ def evaluar_h5_variabilidad(
     )
     cultivos_ord = ["Arroz", "Maíz", "Yuca"]
     if not all(c in piv_cv.columns for c in cultivos_ord):
-        return pd.DataFrame()
+        completos = pd.DataFrame(columns=cultivos_ord)
+    else:
+        completos = piv_cv[cultivos_ord].dropna()
 
-    completos = piv_cv[cultivos_ord].dropna()
     mat = completos.to_numpy(dtype=float)
     n_mpios = len(completos)
-    f_res = prueba_friedman(mat)
+    f_res = prueba_friedman(mat) if n_mpios >= 2 else prueba_friedman(np.empty((0, 3)))
 
     if n_mpios >= MINIMO_UNIDADES_PRUEBA:
         ic_w_inf, ic_w_sup = bootstrap_w_kendall_vectorizado(
@@ -594,8 +661,12 @@ def evaluar_h5_variabilidad(
         ("Maíz", "Yuca", "H5_CV_Maiz_vs_Yuca"),
     ]
     for idx, (c_a, c_b, id_h) in enumerate(pares_c):
-        diff_cv = completos[c_a].to_numpy(dtype=float) - completos[c_b].to_numpy(dtype=float)
-        if n_mpios >= MINIMO_UNIDADES_PRUEBA:
+        diff_cv = (
+            completos[c_a].to_numpy(dtype=float) - completos[c_b].to_numpy(dtype=float)
+            if n_mpios > 0
+            else np.array([], dtype=float)
+        )
+        if n_mpios >= 2:
             w_res = prueba_wilcoxon_pareada(diff_cv)
             hl_diff = estimador_hodges_lehmann_diferencia(diff_cv)
             ic_l, ic_u = bootstrap_hodges_lehmann_vectorizado(
@@ -645,9 +716,10 @@ def evaluar_h5_variabilidad(
 
     decisiones: list[str] = []
     for fila in df_h5.to_dict(orient="records"):
+        n_u = int(fila["n"])
         p_adj = float(fila["valor_p_ajustado"])
-        if np.isnan(p_adj):
-            decisiones.append("muestra insuficiente")
+        if n_u < MINIMO_UNIDADES_PRUEBA or np.isnan(p_adj):
+            decisiones.append("insuficiente (n < 6, D6)")
         elif p_adj < ALFA_CONFIRMATORIO:
             decisiones.append("diferencia significativa de variabilidad")
         else:
@@ -736,7 +808,7 @@ def evaluar_e1_clima(
             pares_c = piv_fase.loc[piv_fase["cultivo"] == cultivo, ["nina", "neutro"]].dropna()
 
         n_mpios = len(pares_c)
-        if n_mpios < MINIMO_UNIDADES_PRUEBA:
+        if n_mpios < 2:
             filas.append(
                 {
                     "id_hipotesis": f"E1_nina_vs_neutro_{cultivo}",
@@ -855,7 +927,7 @@ def evaluar_e2_quiebre_2022(
 
         n_mpios = len(pares_c)
         titulo_e2 = f"E2 Exploratoria: tasa no cosechada 2022-2025 vs 2019-2021 ({cultivo})"
-        if n_mpios < MINIMO_UNIDADES_PRUEBA:
+        if n_mpios < 2:
             filas.append(
                 {
                     "id_hipotesis": f"E2_quiebre_2022_{cultivo}",
@@ -926,9 +998,14 @@ def ejecutar_bateria_hipotesis(
     umbral_ha: float = 500.0,
     replicas_boot: int = 5000,
     unidad_h2_h3: str = "municipio",
+    excluir_poco_informativas: bool = False,
 ) -> dict[str, pd.DataFrame]:
     df_h1, df_h1_pend = evaluar_h1_tendencia(
-        tablas, cfg, umbral_ha=umbral_ha, replicas_boot=replicas_boot
+        tablas,
+        cfg,
+        umbral_ha=umbral_ha,
+        replicas_boot=replicas_boot,
+        excluir_poco_informativas=excluir_poco_informativas,
     )
     df_h2 = evaluar_h2_maiz(
         tablas,
@@ -947,7 +1024,13 @@ def ejecutar_bateria_hipotesis(
     df_h4, df_h4_pares = evaluar_h4_departamentos(
         tablas, cfg, umbral_ha=umbral_ha, replicas_boot=replicas_boot
     )
-    df_h5 = evaluar_h5_variabilidad(tablas, cfg, umbral_ha=umbral_ha, replicas_boot=replicas_boot)
+    df_h5 = evaluar_h5_variabilidad(
+        tablas,
+        cfg,
+        umbral_ha=umbral_ha,
+        replicas_boot=replicas_boot,
+        excluir_poco_informativas=excluir_poco_informativas,
+    )
     df_e1 = evaluar_e1_clima(tablas, df_oni, cfg, umbral_ha=umbral_ha, replicas_boot=replicas_boot)
     df_e2 = evaluar_e2_quiebre_2022(tablas, cfg, umbral_ha=umbral_ha, replicas_boot=replicas_boot)
 
@@ -956,16 +1039,18 @@ def ejecutar_bateria_hipotesis(
         df_exp["valor_p"].to_numpy(dtype=float)
     )
     df_exp["metodo_ajuste"] = "Benjamini-Hochberg"
-    df_exp["decision"] = [
-        "muestra insuficiente"
-        if np.isnan(p)
-        else (
-            "asociacion exploratoria significativa (FDR < 0,05)"
-            if p < ALFA_CONFIRMATORIO
-            else "sin evidencia de asociacion exploratoria"
-        )
-        for p in df_exp["valor_p_ajustado"]
-    ]
+    decisiones_exp: list[str] = []
+    for fila in df_exp.to_dict(orient="records"):
+        n_u = int(fila["n"])
+        nom_est = str(fila["nombre_estadistico"])
+        p_adj = float(fila["valor_p_ajustado"])
+        if (nom_est == "W" and n_u < MINIMO_UNIDADES_PRUEBA) or np.isnan(p_adj):
+            decisiones_exp.append("insuficiente (n < 6, D6)")
+        elif p_adj < ALFA_CONFIRMATORIO:
+            decisiones_exp.append("asociacion exploratoria significativa (FDR < 0,05)")
+        else:
+            decisiones_exp.append("sin evidencia de asociacion exploratoria")
+    df_exp["decision"] = decisiones_exp
 
     n_e1 = len(df_e1)
     df_e1_adj = df_exp.iloc[:n_e1].copy().reset_index(drop=True)
@@ -1017,6 +1102,7 @@ def _fmt_p(valor: float) -> str:
 def generar_reporte_resultados_estadisticos(
     resultados_base: dict[str, pd.DataFrame],
     df_robustez_resumen: pd.DataFrame,
+    df_sensibilidad_d7: pd.DataFrame,
     df_oni: pd.DataFrame,
     tablas_base: dict[str, pd.DataFrame],
     cfg: ConfiguracionEdicion,
@@ -1099,6 +1185,39 @@ def generar_reporte_resultados_estadisticos(
             f"{fila['decision']} | {rob_txt} |"
         )
 
+    lineas.extend(
+        [
+            "",
+            (
+                "### 2.1. Sensibilidad adicional post-hoc "
+                "(D7: H1 y H5 excluyendo series poco informativas)"
+            ),
+            "",
+            (
+                "| Hipótesis (sensibilidad post-hoc D7) | Familia | n (sin poco informativas) "
+                "| Estadístico | p | p ajustado | Efecto | Intervalo de 95 % "
+                "| Decisión en sensibilidad D7 |"
+            ),
+            "| :--- | :---: | ---: | :--- | ---: | ---: | :--- | :---: | :--- |",
+        ]
+    )
+    for fila in df_sensibilidad_d7.to_dict(orient="records"):
+        est_txt = f"{fila['nombre_estadistico']} = {_fmt_dec(float(fila['estadistico']), 2)}"
+        ef_txt = f"{fila['nombre_efecto']}: {_fmt_dec(float(fila['efecto']), 4)}"
+        ic_inf = float(fila["ic_95_inf"])
+        ic_sup = float(fila["ic_95_sup"])
+        ic_txt = (
+            f"[{_fmt_dec(ic_inf, 4)}; {_fmt_dec(ic_sup, 4)}]"
+            if not (np.isnan(ic_inf) or np.isnan(ic_sup))
+            else "N/A"
+        )
+        lineas.append(
+            f"| {fila['hipotesis']} | `{fila['familia']}` | {_fmt_ent(fila['n'])} | "
+            f"{est_txt} | {_fmt_p(float(fila['valor_p']))} | "
+            f"{_fmt_p(float(fila['valor_p_ajustado']))} | {ef_txt} | {ic_txt} | "
+            f"{fila['decision']} |"
+        )
+
     per_sis = tablas_base["periodo_municipio_sistema"]
     yuca_sis = (
         per_sis.loc[per_sis["cultivo"] == "Yuca"]
@@ -1120,11 +1239,12 @@ def generar_reporte_resultados_estadisticos(
 
     txt_h1 = (
         "En los municipios elegibles de la Región Caribe la pendiente mediana de Theil-Sen "
-        "es 0,0000 t/ha/año en los tres cultivos y no supera el umbral de significancia "
-        "tras la corrección de Holm (con intervalos de confianza relativos contenidos dentro "
-        "de la banda de +/- 1 % anual en el escenario base); en arroz y yuca el resultado es "
-        "firme, mientras que en maíz es frágil porque la ligera pendiente negativa alcanza "
-        "significancia estadística al ampliar la muestra a 300 ha o al excluir años individuales."
+        "es 0,0000 t/ha/año debido a la alta proporción de años consecutivos con rendimiento "
+        "administrativo repetido (que genera pendientes exactamente nulas descartadas por "
+        "Wilcoxon con `zero_method='wilcox'`); conforme a D7, la tendencia no es medible en "
+        "las series con valores repetidos y no debe interpretarse como equivalencia práctica, "
+        "siendo además frágil en maíz (donde al excluir las series poco informativas o ampliar "
+        "a 300 ha emerge una ligera pendiente negativa estadísticamente significativa)."
     )
     txt_h2 = (
         "En los municipios elegibles que registran ambos sistemas de maíz en los mismos años "
@@ -1142,8 +1262,9 @@ def generar_reporte_resultados_estadisticos(
         "arroz bajo riego (razón HL = 2,02; firme) como el secano mecanizado (razón HL = 1,62; "
         "firme) se asocian con rendimientos significativamente mayores que el secano manual, "
         "mientras que el contraste directo entre riego y secano mecanizado cuenta con solo "
-        "5 municipios elegibles con par (frágil por tamaño muestral en nivel municipal frente "
-        "a municipio-año o umbral de 300 ha) y el complemento de Friedman sobre las "
+        "5 municipios elegibles con par y se clasifica como **insuficiente** según D6 (dado "
+        "que con n < 6 el valor p bilateral exacto mínimo en Wilcoxon es 0,0625 > 0,05); el "
+        "complemento de Friedman sobre las "
         f"{_fmt_ent(h3_comp['n_tripletas'])} tripletas completas arroja "
         f"chi2 = {_fmt_dec(float(h3_comp['estadistico_chi2']), 2)} "
         f"(p = {_fmt_p(float(h3_comp['valor_p']))}, "
@@ -1165,18 +1286,21 @@ def generar_reporte_resultados_estadisticos(
         "diferenciación departamental."
     )
     txt_h5 = (
-        "En los 76 municipios donde arroz, maíz y yuca son simultáneamente elegibles, ni la "
-        "prueba ómnibus de Friedman (W de Kendall = 0,0168; p = 0,2791) ni las comparaciones "
+        "En los 76 municipios donde arroz, maíz y yuca son simultáneamente elegibles (así "
+        "como en los 52 municipios que restan al excluir las series poco informativas en la "
+        "sensibilidad post-hoc D7), ni la prueba ómnibus de Friedman ni las comparaciones "
         "pareadas de Wilcoxon con corrección de Holm muestran diferencias estadísticamente "
-        "significativas en el coeficiente de variación interanual del rendimiento, resultado "
-        "que se mantiene firme en todas las variantes."
+        "significativas en el coeficiente de variación interanual del rendimiento (firme)."
     )
     txt_e1 = (
         "En el análisis exploratorio climático (corregido por Benjamini-Hochberg), ni las "
         "correlaciones exactas de Spearman a escala regional anual (n = 7 años) con el índice "
         "ONI ni las comparaciones intramunicipales pareadas entre años La Niña (2021-2022) y "
-        "años neutros (2020, 2024, 2025) muestran asociaciones estadísticamente significativas, "
-        "con estabilidad firme en todas las variantes."
+        "años neutros (2020, 2024, 2025) muestran asociaciones estadísticamente significativas "
+        "(firme). Conforme a D8, la ausencia de correlación regional con el ONI anual no "
+        "descarta eventos hidrometeorológicos locales, y el pico de área no cosechada de "
+        "arroz en 2021 (36.766,30 ha; 23,64 %) se describe como un episodio concentrado "
+        "geográficamente sin atribución climática."
     )
     txt_e2 = (
         "Tras excluir los municipios con área cosechada acumulada superior a la sembrada (D4), "
@@ -1249,6 +1373,22 @@ def ejecutar_inferencia_completa(
         unidad_h2_h3="municipio",
     )
 
+    df_h1_d7, _ = evaluar_h1_tendencia(
+        tablas_base,
+        cfg,
+        umbral_ha=cfg.parametros.area_cosechada_minima_ha,
+        replicas_boot=cfg.parametros.replicas_bootstrap,
+        excluir_poco_informativas=True,
+    )
+    df_h5_d7 = evaluar_h5_variabilidad(
+        tablas_base,
+        cfg,
+        umbral_ha=cfg.parametros.area_cosechada_minima_ha,
+        replicas_boot=cfg.parametros.replicas_bootstrap,
+        excluir_poco_informativas=True,
+    )
+    df_sensibilidad_d7 = pd.concat([df_h1_d7, df_h5_d7], ignore_index=True)
+
     df_robustez_detalle, df_robustez_resumen = evaluar_robustez_completa(
         df_limpio=df_limpio,
         df_oni=df_oni,
@@ -1261,6 +1401,7 @@ def ejecutar_inferencia_completa(
 
     for nombre, df_res in resultados_base.items():
         df_res.to_parquet(dir_resultados / f"{nombre}.parquet", index=False)
+    df_sensibilidad_d7.to_parquet(dir_resultados / "sensibilidad_d7.parquet", index=False)
     df_robustez_detalle.to_parquet(dir_resultados / "robustez_detalle.parquet", index=False)
     df_robustez_resumen.to_parquet(dir_resultados / "robustez.parquet", index=False)
 
@@ -1269,6 +1410,7 @@ def ejecutar_inferencia_completa(
         generar_reporte_resultados_estadisticos(
             resultados_base=resultados_base,
             df_robustez_resumen=df_robustez_resumen,
+            df_sensibilidad_d7=df_sensibilidad_d7,
             df_oni=df_oni,
             tablas_base=tablas_base,
             cfg=cfg,

@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from rindex.calidad import diagnosticar_vector_rendimiento
 from rindex.clima import clasificar_enso_anual, parsear_oni_ascii
 from rindex.estadistica import (
     ajustar_p_benjamini_hochberg,
@@ -19,6 +20,7 @@ from rindex.estadistica import (
     prueba_wilcoxon_pareada,
     remuestrear_municipios_completos,
 )
+from rindex.robustez import clasificar_suficiencia_wilcoxon
 
 
 def test_theil_sen_recupera_pendiente_exacta_serie_lineal() -> None:
@@ -190,3 +192,18 @@ def test_clasificacion_enso_oni_sintetico_es_la_esperada() -> None:
     assert pytest.approx(float(df_anual.loc[2022, "oni_anual"]), abs=1e-9) == -0.15
     assert int(df_anual.loc[2022, "temporadas_nina"]) == 6
     assert int(df_anual.loc[2022, "temporadas_nino"]) == 3
+
+
+def test_serie_sintetica_constante_proporcion_repetidos_1_y_poco_informativa() -> None:
+    serie_constante = [3.5, 3.5, 3.5, 3.5, 3.5, 3.5]
+    diag = diagnosticar_vector_rendimiento(serie_constante)
+    assert pytest.approx(float(diag["proporcion_repetidos"]), abs=1e-12) == 1.0
+    assert bool(diag["serie_poco_informativa"]) is True
+    assert bool(diag["todos_identicos"]) is True
+    assert int(diag["racha_maxima"]) == 6
+
+
+def test_wilcoxon_con_n_menor_a_6_queda_clasificado_como_insuficiente() -> None:
+    for n in (0, 1, 2, 3, 4, 5):
+        assert clasificar_suficiencia_wilcoxon(n) == "insuficiente"
+    assert clasificar_suficiencia_wilcoxon(6) == "suficiente"

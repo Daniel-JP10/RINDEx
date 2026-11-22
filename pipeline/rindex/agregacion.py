@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from rindex.calidad import calcular_metricas_repeticion_series
 from rindex.config import ConfiguracionEdicion, cargar_configuracion
 from rindex.limpieza import limpiar_eva
 
@@ -165,6 +166,17 @@ def _construir_tabla_periodo(
     )
 
     agrupado = agrupado.drop(columns=["media_rend_anual", "std_rend_anual"])
+
+    diag_rep = calcular_metricas_repeticion_series(df_anual, llaves_periodo)
+    agrupado = agrupado.merge(
+        diag_rep[llaves_periodo + ["proporcion_repetidos", "serie_poco_informativa"]],
+        on=llaves_periodo,
+        how="left",
+    )
+    agrupado["proporcion_repetidos"] = agrupado["proporcion_repetidos"].fillna(0.0).astype(float)
+    agrupado["serie_poco_informativa"] = (
+        agrupado["serie_poco_informativa"].fillna(True).astype(bool)
+    )
 
     anios_min = cfg.parametros.anios_minimos_con_dato
     agrupado["elegible_300"] = (agrupado["area_cosechada"] >= 300.0) & (
