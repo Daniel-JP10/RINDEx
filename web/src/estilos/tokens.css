@@ -1,0 +1,156 @@
+/* Tokens de diseno RINDEx: claro, oscuro, cultivos, tipografia, espaciado y movimiento. */
+
+:root {
+  color-scheme: light dark;
+
+  /* Superficies y tintas (tema claro por defecto) */
+  --color-fondo: #EEF1E3;
+  --color-superficie: #F7F8F0;
+  --color-superficie-elevada: #FFFFFF;
+  --color-tinta: #1F2A22;
+  --color-tinta-secundaria: #55604F;
+  --color-linea: #D5DBC6;
+  --color-contexto-gris: #B9BFAE;
+
+  /* Colores de cultivo adaptados en tema claro para cumplir WCAG 3:1 sobre #EEF1E3 */
+  --color-maiz: #9D7C12;
+  --color-yuca: #C0603F;
+  --color-arroz: #358C80;
+
+  /* Escalas secuenciales de 5 pasos en espacio CIE Lab (claro: de casi #EEF1E3 a intenso) */
+  --escala-maiz-1: #DEDAC2;
+  --escala-maiz-2: #C8B994;
+  --escala-maiz-3: #B09B68;
+  --escala-maiz-4: #977D3E;
+  --escala-maiz-5: #7B5F0B;
+
+  --escala-yuca-1: #E4D5C4;
+  --escala-yuca-2: #D4B09A;
+  --escala-yuca-3: #C28B71;
+  --escala-yuca-4: #AE674B;
+  --escala-yuca-5: #964125;
+
+  --escala-arroz-1: #CFDBCE;
+  --escala-arroz-2: #A5BEB1;
+  --escala-arroz-3: #7CA195;
+  --escala-arroz-4: #53857A;
+  --escala-arroz-5: #22685F;
+
+  /* Tipografia */
+  --fuente-titulos: "Fraunces Variable", Georgia, serif;
+  --fuente-cuerpo: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+
+  /* Escala tipografica de 6 tamanos */
+  --texto-xs: 0.75rem;
+  --texto-sm: 0.875rem;
+  --texto-base: 1rem;
+  --texto-lg: 1.25rem;
+  --texto-xl: 1.75rem;
+  --texto-2xl: clamp(2rem, 4vw, 2.75rem);
+
+  /* Espaciado en multiplos de 4 px */
+  --esp-1: 4px;
+  --esp-2: 8px;
+  --esp-3: 12px;
+  --esp-4: 16px;
+  --esp-6: 24px;
+  --esp-8: 32px;
+  --esp-12: 48px;
+  --esp-16: 64px;
+
+  /* Radios y sombra unica suave */
+  --radio-sm: 8px;
+  --radio-lg: 16px;
+  --sombra-suave: 0 6px 20px rgba(31, 42, 34, 0.08);
+
+  /* Movimiento */
+  --duracion-rapida: 200ms;
+  --duracion-mapa: 600ms;
+  --curva-movimiento: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"]) {
+    --color-fondo: #18201B;
+    --color-superficie: #202A23;
+    --color-superficie-elevada: #27332B;
+    --color-tinta: #E9EDE0;
+    --color-tinta-secundaria: #A9B3A2;
+    --color-linea: #34403A;
+    --color-contexto-gris: #5A635D;
+
+    --color-maiz: #C9A227;
+    --color-yuca: #C0603F;
+    --color-arroz: #3E9C8F;
+
+    --escala-maiz-1: #333422;
+    --escala-maiz-2: #5A522A;
+    --escala-maiz-3: #847232;
+    --escala-maiz-4: #AF9339;
+    --escala-maiz-5: #DFB83F;
+
+    --escala-yuca-1: #332D24;
+    --escala-yuca-2: #5A4031;
+    --escala-yuca-3: #83543E;
+    --escala-yuca-4: #AD684C;
+    --escala-yuca-5: #DC7D5B;
+
+    --escala-arroz-1: #22342E;
+    --escala-arroz-2: #30524A;
+    --escala-arroz-3: #3E7268;
+    --escala-arroz-4: #4C9387;
+    --escala-arroz-5: #5AB8AA;
+
+    --sombra-suave: 0 8px 24px rgba(0, 0, 0, 0.28);
+  }
+}
+
+:root[data-tema="oscuro"] {
+  --color-fondo: #18201B;
+  --color-superficie: #202A23;
+  --color-superficie-elevada: #27332B;
+  --color-tinta: #E9EDE0;
+  --color-tinta-secundaria: #A9B3A2;
+  --color-linea: #34403A;
+  --color-contexto-gris: #5A635D;
+
+  --color-maiz: #C9A227;
+  --color-yuca: #C0603F;
+  --color-arroz: #3E9C8F;
+
+  --escala-maiz-1: #333422;
+  --escala-maiz-2: #5A522A;
+  --escala-maiz-3: #847232;
+  --escala-maiz-4: #AF9339;
+  --escala-maiz-5: #DFB83F;
+
+  --escala-yuca-1: #332D24;
+  --escala-yuca-2: #5A4031;
+  --escala-yuca-3: #83543E;
+  --escala-yuca-4: #AD684C;
+  --escala-yuca-5: #DC7D5B;
+
+  --escala-arroz-1: #22342E;
+  --escala-arroz-2: #30524A;
+  --escala-arroz-3: #3E7268;
+  --escala-arroz-4: #4C9387;
+  --escala-arroz-5: #5AB8AA;
+
+  --sombra-suave: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duracion-rapida: 0ms;
+    --duracion-mapa: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}
