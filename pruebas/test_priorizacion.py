@@ -7,6 +7,7 @@ import pytest
 from rindex.brecha import calcular_brecha_potencial, simular_brecha_bootstrap_unidad
 from rindex.config import ConfiguracionEdicion, validar_diccionario_config
 from rindex.escenarios import combinar_escenarios_sin_doble_conteo, evaluar_s1_lineal
+from rindex.evidencia import clasificar_nivel_evidencia_cultivo
 from rindex.prioridad import generar_pesos_dirichlet
 from test_config import config_base_valida
 
@@ -190,3 +191,11 @@ def test_bootstrap_dos_niveles_varianza_mayor_o_igual_que_un_nivel() -> None:
 
     assert float(np.var(brecha_2, ddof=1)) >= float(np.var(brecha_1, ddof=1))
     assert float(np.var(gan_2, ddof=1)) >= float(np.var(gan_1, ddof=1))
+
+
+def test_clasificacion_nivel_evidencia_cultivo_reglas_d9() -> None:
+    cfg = _cfg_prueba()
+    assert clasificar_nivel_evidencia_cultivo(18.0, 28.3, cfg) == "alto"
+    assert clasificar_nivel_evidencia_cultivo(19.0, 37.3, cfg) == "alto"
+    assert clasificar_nivel_evidencia_cultivo(30.0, 60.0, cfg) == "medio"
+    assert clasificar_nivel_evidencia_cultivo(45.8, 91.1, cfg) == "bajo"

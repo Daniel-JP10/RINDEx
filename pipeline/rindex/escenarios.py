@@ -269,6 +269,7 @@ def construir_escenarios_municipales(
                 "s1_p90": s1_p90,
                 "s2_area_convertible_ha": s2_area_base,
                 "efecto_regional": bool(efecto_regional_s2),
+                "extrapolado": bool(efecto_regional_s2),
                 "s2_p10": s2_p10,
                 "s2_p50": s2_p50,
                 "s2_p90": s2_p90,
@@ -289,10 +290,16 @@ def construir_escenarios_municipales(
     df_esc = pd.DataFrame(filas_esc)
 
     # Totales regionales por cultivo al 100 % y como porcentaje de la produccion anual media
+    df_esc["s2_p50_ext"] = np.where(df_esc["extrapolado"], df_esc["s2_p50"], 0.0)
+    df_esc["mpio_s2_ext"] = (df_esc["extrapolado"] & (df_esc["s2_p50"] > 0)).astype(int)
+    df_esc["mpio_s2_con_ganancia"] = (df_esc["s2_p50"] > 0).astype(int)
+
     totales_reg = (
         df_esc.groupby("cultivo", as_index=False)
         .agg(
             municipios_elegibles=("codigo_dane_municipio", "count"),
+            municipios_con_s2=("mpio_s2_con_ganancia", "sum"),
+            municipios_s2_extrapolados=("mpio_s2_ext", "sum"),
             produccion_anual_media_t=("produccion_media_anual", "sum"),
             s1_p10=("s1_p10", "sum"),
             s1_p50=("s1_p50", "sum"),
@@ -300,6 +307,7 @@ def construir_escenarios_municipales(
             s2_p10=("s2_p10", "sum"),
             s2_p50=("s2_p50", "sum"),
             s2_p90=("s2_p90", "sum"),
+            s2_p50_extrapolado=("s2_p50_ext", "sum"),
             s3_p10=("s3_p10", "sum"),
             s3_p50=("s3_p50", "sum"),
             s3_p90=("s3_p90", "sum"),
@@ -309,11 +317,17 @@ def construir_escenarios_municipales(
         )
         .sort_values("cultivo")
     )
+    df_esc = df_esc.drop(columns=["s2_p50_ext", "mpio_s2_ext", "mpio_s2_con_ganancia"])
     for pref in ("s1", "s2", "s3", "combinado"):
         totales_reg[f"{pref}_p50_pct_prod"] = np.where(
             totales_reg["produccion_anual_media_t"] > 0,
             totales_reg[f"{pref}_p50"] / totales_reg["produccion_anual_media_t"] * 100.0,
             0.0,
         )
+    totales_reg["s2_pct_extrapolado"] = np.where(
+        totales_reg["s2_p50"] > 0,
+        totales_reg["s2_p50_extrapolado"] / totales_reg["s2_p50"] * 100.0,
+        0.0,
+    )
 
     return df_esc, totales_reg

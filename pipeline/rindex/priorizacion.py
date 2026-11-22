@@ -206,10 +206,11 @@ def generar_reporte_priorizacion(
             (
                 "| Cultivo | Producción anual media (t) | S1 Cierre brecha $p_{50}$ (`[p10; p90]`) "
                 "| S1 % prod. | S2 Tecnificación $p_{50}$ (`[p10; p90]`) | S2 % prod. "
+                "| % S2 extrapolado "
                 "| S3 Área no cosechada $p_{50}$ (`[p10; p90]`) "
                 "| Combinado sin doble conteo $p_{50}$ (`[p10; p90]`) | Combinado % prod. |"
             ),
-            "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+            "| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
         ]
     )
 
@@ -221,11 +222,12 @@ def generar_reporte_priorizacion(
             f"{_fmt_dec(f['combinado_p50'])} "
             f"(`[{_fmt_dec(f['combinado_p10'])}; {_fmt_dec(f['combinado_p90'])}]`)"
         )
+        pct_ext_s2 = float(f.get("s2_pct_extrapolado", 0.0))
         lineas.append(
             f"| **{f['cultivo']}** | {_fmt_dec(f['produccion_anual_media_t'])} | {s1_txt} | "
             f"{_fmt_dec(f['s1_p50_pct_prod'])} % | {s2_txt} | "
-            f"{_fmt_dec(f['s2_p50_pct_prod'])} % | {s3_txt} | {comb_txt} | "
-            f"{_fmt_dec(f['combinado_p50_pct_prod'])} % |"
+            f"{_fmt_dec(f['s2_p50_pct_prod'])} % | {_fmt_dec(pct_ext_s2)} % | "
+            f"{s3_txt} | {comb_txt} | {_fmt_dec(f['combinado_p50_pct_prod'])} % |"
         )
 
     lineas.extend(

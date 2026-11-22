@@ -109,6 +109,28 @@ class ConfigPriorizacion:
 
 
 @dataclass(frozen=True)
+class ConfigEvidenciaCultivo:
+    alto_max_pares_identicos_pct: float
+    alto_max_enteros_pct: float
+    medio_max_pares_identicos_pct: float
+    medio_max_enteros_pct: float
+
+
+@dataclass(frozen=True)
+class ConfigEvidenciaMunicipal:
+    alto_max_proporcion_repetidos: float
+    alto_max_filas_atipicas: int
+    medio_max_proporcion_repetidos: float
+    medio_max_filas_atipicas: int
+
+
+@dataclass(frozen=True)
+class ConfigEvidencia:
+    cultivo: ConfigEvidenciaCultivo
+    municipal: ConfigEvidenciaMunicipal
+
+
+@dataclass(frozen=True)
 class MapeoDesagregacionItem:
     cultivo: str
     sistema: str
@@ -134,6 +156,7 @@ class ConfiguracionEdicion:
     parametros: ConfigParametros
     clima: ConfigClima
     priorizacion: ConfigPriorizacion
+    evidencia: ConfigEvidencia
     mapeo_desagregacion: dict[str, MapeoDesagregacionItem]
     limites_plausibilidad_rendimiento: dict[str, LimitePlausibilidad]
 
@@ -229,6 +252,31 @@ def _validar_priorizacion(raw_prio: Any) -> ConfigPriorizacion:
     )
 
 
+def _validar_evidencia(raw_ev: Any) -> ConfigEvidencia:
+    if not isinstance(raw_ev, dict):
+        raw_ev = {}
+    cul_raw = raw_ev.get("cultivo", {})
+    mpio_raw = raw_ev.get("municipal", {})
+    return ConfigEvidencia(
+        cultivo=ConfigEvidenciaCultivo(
+            alto_max_pares_identicos_pct=float(cul_raw.get("alto_max_pares_identicos_pct", 25.0)),
+            alto_max_enteros_pct=float(cul_raw.get("alto_max_enteros_pct", 50.0)),
+            medio_max_pares_identicos_pct=float(cul_raw.get("medio_max_pares_identicos_pct", 40.0)),
+            medio_max_enteros_pct=float(cul_raw.get("medio_max_enteros_pct", 70.0)),
+        ),
+        municipal=ConfigEvidenciaMunicipal(
+            alto_max_proporcion_repetidos=float(
+                mpio_raw.get("alto_max_proporcion_repetidos", 0.25)
+            ),
+            alto_max_filas_atipicas=int(mpio_raw.get("alto_max_filas_atipicas", 0)),
+            medio_max_proporcion_repetidos=float(
+                mpio_raw.get("medio_max_proporcion_repetidos", 0.50)
+            ),
+            medio_max_filas_atipicas=int(mpio_raw.get("medio_max_filas_atipicas", 1)),
+        ),
+    )
+
+
 def validar_diccionario_config(datos: dict[str, Any]) -> ConfiguracionEdicion:
     _verificar_campos(datos, CAMPOS_RAIZ_OBLIGATORIOS)
     _verificar_campos(datos["anios"], CAMPOS_ANIOS_OBLIGATORIOS, prefijo="anios.")
@@ -304,6 +352,7 @@ def validar_diccionario_config(datos: dict[str, Any]) -> ConfiguracionEdicion:
     )
 
     priorizacion = _validar_priorizacion(datos.get("priorizacion"))
+    evidencia = _validar_evidencia(datos.get("evidencia"))
     mapeo = _validar_mapeo_desagregacion(datos["mapeo_desagregacion"])
     limites = _validar_limites_plausibilidad(
         datos["limites_plausibilidad_rendimiento"],
@@ -322,6 +371,7 @@ def validar_diccionario_config(datos: dict[str, Any]) -> ConfiguracionEdicion:
         parametros=parametros,
         clima=clima,
         priorizacion=priorizacion,
+        evidencia=evidencia,
         mapeo_desagregacion=mapeo,
         limites_plausibilidad_rendimiento=limites,
     )

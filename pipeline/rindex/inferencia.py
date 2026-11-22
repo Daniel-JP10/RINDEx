@@ -173,21 +173,12 @@ def evaluar_h1_tendencia(
             tablas=tablas,
             cfg=cfg,
             umbral_ha=umbral_ha,
-            replicas_boot=min(replicas_boot, cfg.parametros.bootstrap_robustez),
+            replicas_boot=replicas_boot,
             excluir_poco_informativas=True,
         )
         mapa_d7 = {str(f["id_hipotesis"]): f for f in df_h1_d7.to_dict(orient="records")}
     else:
         mapa_d7 = {}
-
-    per_cul = tablas["periodo_municipio_cultivo"]
-    tiene_poco_inf_por_cultivo: dict[str, bool] = {}
-    if "serie_poco_informativa" in per_cul.columns:
-        for c in cfg.cultivos:
-            sub_c = per_cul.loc[
-                (per_cul["cultivo"] == c) & (per_cul["area_cosechada"] >= umbral_ha)
-            ]
-            tiene_poco_inf_por_cultivo[c] = bool(sub_c["serie_poco_informativa"].any())
 
     decisiones: list[str] = []
     for fila in df_h1.to_dict(orient="records"):
@@ -196,30 +187,65 @@ def evaluar_h1_tendencia(
         n_m = int(fila["n"])
         p_adj = float(fila["valor_p_ajustado"])
         ef = float(fila["efecto"])
+        ef_pct = float(fila["efecto_secundario"])
         ic_pct_l = float(fila["ic_95_sec_inf"])
         ic_pct_u = float(fila["ic_95_sec_sup"])
 
         if n_m < MINIMO_UNIDADES_PRUEBA or np.isnan(p_adj):
             decisiones.append("insuficiente (n < 6, D6)")
-        elif p_adj < ALFA_CONFIRMATORIO:
-            sentido = "positiva" if ef > 0 else ("negativa" if ef < 0 else "nula")
-            decisiones.append(f"tendencia {sentido} significativa")
-        elif ic_pct_l >= -1.0 and ic_pct_u <= 1.0:
-            # D7: verificar si la aparente equivalencia se debe a series con valores repetidos
-            fila_d7 = mapa_d7.get(id_h)
-            altera_d7 = False
-            if fila_d7 is not None:
-                p_d7 = float(fila_d7["valor_p_ajustado"])
-                l_d7 = float(fila_d7["ic_95_sec_inf"])
-                u_d7 = float(fila_d7["ic_95_sec_sup"])
-                if not np.isnan(p_d7) and (p_d7 < ALFA_CONFIRMATORIO or l_d7 < -1.0 or u_d7 > 1.0):
-                    altera_d7 = True
-            if altera_d7 or tiene_poco_inf_por_cultivo.get(cultivo, False):
-                decisiones.append("la tendencia no es medible en las series con valores repetidos")
+            continue
+
+        if cultivo == "Yuca":
+            decisiones.append("la tendencia no es medible por la repeticion de valores")
+            continue
+
+        sig_base = p_adj < ALFA_CONFIRMATORIO
+        if excluir_poco_informativas:
+            if sig_base:
+                if ef < 0:
+                    pct_txt = _fmt_dec(ef_pct, 2)
+                    decisiones.append(
+                        "tendencia negativa estadisticamente significativa solo al excluir "
+                        "series poco informativas, de magnitud practicamente despreciable "
+                        f"({pct_txt} % anual)"
+                    )
+                else:
+                    sentido = "positiva" if ef > 0 else "nula"
+                    decisiones.append(f"tendencia {sentido} significativa")
+            elif ic_pct_l >= -1.0 and ic_pct_u <= 1.0:
+                decisiones.append(
+                    "sin evidencia de tendencia (equivalencia practica +/- 1 % anual)"
+                )
             else:
-                decisiones.append("equivalencia practica (+/- 1 % anual)")
+                decisiones.append("sin evidencia de tendencia")
+            continue
+
+        fila_d7 = mapa_d7.get(id_h)
+        sig_d7 = (
+            fila_d7 is not None
+            and not np.isnan(float(fila_d7["valor_p_ajustado"]))
+            and float(fila_d7["valor_p_ajustado"]) < ALFA_CONFIRMATORIO
+        )
+
+        if sig_base == sig_d7:
+            if not sig_base:
+                if ic_pct_l >= -1.0 and ic_pct_u <= 1.0:
+                    decisiones.append(
+                        "sin evidencia de tendencia (equivalencia practica +/- 1 % anual)"
+                    )
+                else:
+                    decisiones.append("sin evidencia de tendencia")
+            else:
+                sentido = "positiva" if ef > 0 else ("negativa" if ef < 0 else "nula")
+                decisiones.append(f"tendencia {sentido} significativa")
         else:
-            decisiones.append("sin evidencia de tendencia")
+            pct_d7 = float(fila_d7["efecto_secundario"]) if fila_d7 is not None else ef_pct
+            pct_d7_txt = _fmt_dec(pct_d7, 2)
+            decisiones.append(
+                "sin evidencia de tendencia en escenario base; tendencia negativa "
+                "estadisticamente significativa solo al excluir series poco informativas, "
+                f"de magnitud practicamente despreciable ({pct_d7_txt} % anual)"
+            )
 
     df_h1["decision"] = decisiones
     return df_h1, df_pendientes
@@ -1166,14 +1192,27 @@ def generar_reporte_resultados_estadisticos(
 
     for fila in resumen.to_dict(orient="records"):
         est_txt = f"{fila['nombre_estadistico']} = {_fmt_dec(float(fila['estadistico']), 2)}"
-        ef_txt = f"{fila['nombre_efecto']}: {_fmt_dec(float(fila['efecto']), 4)}"
         ic_inf = float(fila["ic_95_inf"])
         ic_sup = float(fila["ic_95_sup"])
-        ic_txt = (
-            f"[{_fmt_dec(ic_inf, 4)}; {_fmt_dec(ic_sup, 4)}]"
-            if not (np.isnan(ic_inf) or np.isnan(ic_sup))
-            else "N/A"
-        )
+        if str(fila["familia"]) == "H1":
+            ef_sec = float(fila["efecto_secundario"])
+            ic_s_inf = float(fila["ic_95_sec_inf"])
+            ic_s_sup = float(fila["ic_95_sec_sup"])
+            ef_txt = (
+                f"{fila['nombre_efecto']}: {_fmt_dec(float(fila['efecto']), 4)} "
+                f"({_fmt_dec(ef_sec, 2)} %/año)"
+            )
+            ic_txt = (
+                f"[{_fmt_dec(ic_inf, 4)}; {_fmt_dec(ic_sup, 4)}] "
+                f"([{_fmt_dec(ic_s_inf, 2)} %; {_fmt_dec(ic_s_sup, 2)} %])"
+            )
+        else:
+            ef_txt = f"{fila['nombre_efecto']}: {_fmt_dec(float(fila['efecto']), 4)}"
+            ic_txt = (
+                f"[{_fmt_dec(ic_inf, 4)}; {_fmt_dec(ic_sup, 4)}]"
+                if not (np.isnan(ic_inf) or np.isnan(ic_sup))
+                else "N/A"
+            )
         rob_clase = str(fila.get("clasificacion_robustez", "firme"))
         var_disc = str(fila.get("variantes_discrepantes", ""))
         rob_txt = f"**{rob_clase}**" if not var_disc else f"**{rob_clase}** ({var_disc})"
@@ -1203,14 +1242,27 @@ def generar_reporte_resultados_estadisticos(
     )
     for fila in df_sensibilidad_d7.to_dict(orient="records"):
         est_txt = f"{fila['nombre_estadistico']} = {_fmt_dec(float(fila['estadistico']), 2)}"
-        ef_txt = f"{fila['nombre_efecto']}: {_fmt_dec(float(fila['efecto']), 4)}"
         ic_inf = float(fila["ic_95_inf"])
         ic_sup = float(fila["ic_95_sup"])
-        ic_txt = (
-            f"[{_fmt_dec(ic_inf, 4)}; {_fmt_dec(ic_sup, 4)}]"
-            if not (np.isnan(ic_inf) or np.isnan(ic_sup))
-            else "N/A"
-        )
+        if str(fila["familia"]) == "H1":
+            ef_sec = float(fila["efecto_secundario"])
+            ic_s_inf = float(fila["ic_95_sec_inf"])
+            ic_s_sup = float(fila["ic_95_sec_sup"])
+            ef_txt = (
+                f"{fila['nombre_efecto']}: {_fmt_dec(float(fila['efecto']), 4)} "
+                f"({_fmt_dec(ef_sec, 2)} %/año)"
+            )
+            ic_txt = (
+                f"[{_fmt_dec(ic_inf, 4)}; {_fmt_dec(ic_sup, 4)}] "
+                f"([{_fmt_dec(ic_s_inf, 2)} %; {_fmt_dec(ic_s_sup, 2)} %])"
+            )
+        else:
+            ef_txt = f"{fila['nombre_efecto']}: {_fmt_dec(float(fila['efecto']), 4)}"
+            ic_txt = (
+                f"[{_fmt_dec(ic_inf, 4)}; {_fmt_dec(ic_sup, 4)}]"
+                if not (np.isnan(ic_inf) or np.isnan(ic_sup))
+                else "N/A"
+            )
         lineas.append(
             f"| {fila['hipotesis']} | `{fila['familia']}` | {_fmt_ent(fila['n'])} | "
             f"{est_txt} | {_fmt_p(float(fila['valor_p']))} | "
@@ -1238,13 +1290,21 @@ def generar_reporte_resultados_estadisticos(
     h3_comp = resultados_base["h3_friedman_complemento"].iloc[0]
 
     txt_h1 = (
-        "En los municipios elegibles de la Región Caribe la pendiente mediana de Theil-Sen "
-        "es 0,0000 t/ha/año debido a la alta proporción de años consecutivos con rendimiento "
-        "administrativo repetido (que genera pendientes exactamente nulas descartadas por "
-        "Wilcoxon con `zero_method='wilcox'`); conforme a D7, la tendencia no es medible en "
-        "las series con valores repetidos y no debe interpretarse como equivalencia práctica, "
-        "siendo además frágil en maíz (donde al excluir las series poco informativas o ampliar "
-        "a 300 ha emerge una ligera pendiente negativa estadísticamente significativa)."
+        "Aplicando la regla de decisión por cultivo de D7: (1) en **arroz**, la sensibilidad D7 "
+        "no cambia la conclusión (p ajustado = 0,7938 en base y 0,9007 en D7) y el intervalo de "
+        "confianza al 95 % de la pendiente relativa en el escenario base ([-0,46 %; +0,86 %] "
+        "anual) queda contenido dentro de +/- 1 % anual, por lo que la decisión es **sin "
+        "evidencia de tendencia (equivalencia práctica +/- 1 % anual)**; (2) en **maíz**, la "
+        "prueba principal no alcanza significancia tras la corrección de Holm (p ajustado = "
+        "0,0549), pero al excluir las 13 series poco informativas en D7 (n = 167) pasa a "
+        "p ajustado = 0,0422 con pendiente mediana de -0,0016 t/ha/año (-0,17 % anual sobre el "
+        "rendimiento medio municipal, IC 95 %: [-1,19 %; 0,00 %]; -0,08 % del rendimiento "
+        "mediano municipal de 2,00 t/ha), por lo que se reportan ambos resultados: **tendencia "
+        "negativa estadísticamente significativa solo al excluir series poco informativas, de "
+        "magnitud prácticamente despreciable (-0,17 % anual)**; y (3) en **yuca**, dada la "
+        "repetición de valores (45,75 % de pares consecutivos idénticos y 29,65 % de pendientes "
+        "exactamente nulas), se mantiene que **la tendencia no es medible por la repetición de "
+        "valores**."
     )
     txt_h2 = (
         "En los municipios elegibles que registran ambos sistemas de maíz en los mismos años "
@@ -1339,6 +1399,115 @@ def generar_reporte_resultados_estadisticos(
             txt_e2,
         ]
     )
+
+    from rindex.evidencia import (
+        calcular_concentracion_arroz_2021,
+        calcular_evidencia_municipal,
+        calcular_evidencia_por_cultivo,
+    )
+
+    df_arroz_21, res_arroz_21 = calcular_concentracion_arroz_2021(
+        tablas_base["anual_municipio_cultivo"]
+    )
+    lineas.extend(
+        [
+            "",
+            (
+                "## 4. Análisis descriptivo de concentración del área no cosechada "
+                "de arroz en 2021 (D8)"
+            ),
+            "",
+            (
+                "- **Área no cosechada regional de arroz en 2021**: "
+                f"`{_fmt_dec(res_arroz_21['area_no_cosechada_regional_2021_ha'], 2)} ha` "
+                f"sobre `{_fmt_dec(res_arroz_21['area_sembrada_regional_2021_ha'], 2)} ha` "
+                f"sembradas (`{_fmt_dec(res_arroz_21['tasa_regional_2021_pct'], 2)} %`)."
+            ),
+            (
+                "- **Aporte de los 5 municipios con mayor área no cosechada**: "
+                f"`{_fmt_dec(res_arroz_21['top5_area_no_cosechada_ha'], 2)} ha` "
+                f"(**`{_fmt_dec(res_arroz_21['top5_pct_regional'], 2)} %`** del total regional)."
+            ),
+            (
+                "- **Aporte de los 10 municipios con mayor área no cosechada**: "
+                f"`{_fmt_dec(res_arroz_21['top10_area_no_cosechada_ha'], 2)} ha` "
+                f"(**`{_fmt_dec(res_arroz_21['top10_pct_regional'], 2)} %`** del total regional)."
+            ),
+            (
+                "- *Nota metodológica (D8)*: descripción estrictamente geográfica "
+                "sin atribución causal climática."
+            ),
+            "",
+            (
+                "| Rango | Código DANE | Municipio | Departamento | Área sembrada 2021 (ha) "
+                "| Área cosechada 2021 (ha) | Área no cosechada 2021 (ha) "
+                "| Tasa propia no cosechada (%) | % del total regional "
+                "| % acumulado regional |"
+            ),
+            "| ---: | :---: | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for f in df_arroz_21.head(10).to_dict(orient="records"):
+        lineas.append(
+            f"| {_fmt_ent(f['rango'])} | `{f['codigo_dane_municipio']}` | {f['municipio']} | "
+            f"{f['departamento']} | {_fmt_dec(float(f['area_sembrada']), 2)} | "
+            f"{_fmt_dec(float(f['area_cosechada']), 2)} | "
+            f"{_fmt_dec(float(f['area_no_cosechada_ha']), 2)} | "
+            f"{_fmt_dec(float(f['tasa_propia_pct']), 2)} % | "
+            f"{_fmt_dec(float(f['pct_total_regional']), 2)} % | "
+            f"{_fmt_dec(float(f['pct_acumulado_regional']), 2)} % |"
+        )
+
+    df_filtrado = pd.read_parquet(cfg.fuente.parquet_filtrado)
+    df_limpio = limpiar_eva(df_filtrado, cfg)
+    ev_cultivo = calcular_evidencia_por_cultivo(
+        df_limpio, tablas_base["anual_municipio_cultivo"], cfg
+    )
+    ev_mpio = calcular_evidencia_municipal(
+        tablas_base["periodo_municipio_cultivo"], ev_cultivo, cfg
+    )
+    piv_ev_m = ev_mpio.pivot_table(
+        index="cultivo",
+        columns="nivel_evidencia_municipal",
+        values="codigo_dane_municipio",
+        aggfunc="count",
+        fill_value=0,
+    )
+    for col_ev in ("alto", "medio", "bajo"):
+        if col_ev not in piv_ev_m.columns:
+            piv_ev_m[col_ev] = 0
+
+    lineas.extend(
+        [
+            "",
+            "## 5. Niveles de evidencia por cultivo y resumen municipal (D9)",
+            "",
+            (
+                "| Cultivo | Pares consecutivos | Pares idénticos (%) "
+                "| Filas semestrales (`> 0 ha`) | Rendimientos enteros (`,00`) (%) "
+                "| Nivel de evidencia del cultivo | Municipios `alto` | Municipios `medio` "
+                "| Municipios `bajo` |"
+            ),
+            "| :--- | ---: | ---: | ---: | ---: | :---: | ---: | ---: | ---: |",
+        ]
+    )
+    for f in ev_cultivo.to_dict(orient="records"):
+        c_nom = str(f["cultivo"])
+        p_id = (
+            f"{_fmt_ent(f['pares_identicos'])} ({_fmt_dec(float(f['pct_pares_identicos']), 2)} %)"
+        )
+        f_ent = (
+            f"{_fmt_ent(f['filas_enteras_semestral'])} "
+            f"({_fmt_dec(float(f['pct_rendimientos_enteros']), 2)} %)"
+        )
+        m_a = _fmt_ent(piv_ev_m.loc[c_nom, "alto"])
+        m_m = _fmt_ent(piv_ev_m.loc[c_nom, "medio"])
+        m_b = _fmt_ent(piv_ev_m.loc[c_nom, "bajo"])
+        lineas.append(
+            f"| **{c_nom}** | {_fmt_ent(f['pares_consecutivos'])} | {p_id} | "
+            f"{_fmt_ent(f['filas_semestrales'])} | {f_ent} | "
+            f"**`{f['nivel_evidencia']}`** | {m_a} | {m_m} | {m_b} |"
+        )
 
     ruta_md.write_text("\n".join(lineas) + "\n", encoding="utf-8")
     return ruta_md

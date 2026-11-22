@@ -70,6 +70,18 @@ priorizacion:
   minimo_municipios_referencia_depto: 5
   percentil_referencia: 75.0
 
+evidencia:
+  cultivo:
+    alto_max_pares_identicos_pct: 25.0
+    alto_max_enteros_pct: 50.0
+    medio_max_pares_identicos_pct: 40.0
+    medio_max_enteros_pct: 70.0
+  municipal:
+    alto_max_proporcion_repetidos: 0.25
+    alto_max_filas_atipicas: 0
+    medio_max_proporcion_repetidos: 0.50
+    medio_max_filas_atipicas: 1
+
 mapeo_desagregacion:
   "Arroz riego":
     cultivo: "Arroz"

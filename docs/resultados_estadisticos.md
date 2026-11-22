@@ -4,7 +4,7 @@
 - **Región**: Caribe
 - **Umbral base de elegibilidad**: `500 ha` y `4` años con dato
 - **Semilla bootstrap**: `2026` (`5.000` réplicas principales; `1.000` en variantes de robustez)
-- **Tiempo total de ejecución**: `56,38 s`
+- **Tiempo total de ejecución**: `66,40 s`
 
 ## 1. Clasificación climática anual ENSO (ONI de NOAA, 2019-2025)
 
@@ -22,9 +22,9 @@
 
 | Hipótesis | Familia | n | Estadístico | p | p ajustado | Efecto | Intervalo de 95 % | Decisión | Robustez |
 | :--- | :---: | ---: | :--- | ---: | ---: | :--- | :---: | :--- | :--- |
-| H1 Tendencia (Arroz) | `H1` | 86 | W = 1.540,50 | 0,7030 | 0,7938 | mediana pendiente (t/ha/anio): 0,0000 | [-0,0231; 0,0248] | la tendencia no es medible en las series con valores repetidos | **firme** |
-| H1 Tendencia (Maíz) | `H1` | 180 | W = 4.659,50 | 0,0183 | 0,0549 | mediana pendiente (t/ha/anio): 0,0000 | [-0,0183; 0,0000] | la tendencia no es medible en las series con valores repetidos | **fragil** (umbral_300ha, sin_2019, sin_2021, sin_2022, sin_2023, sin_2025, sin_poco_informativas_D7) |
-| H1 Tendencia (Yuca) | `H1` | 172 | W = 3.363,00 | 0,3969 | 0,7938 | mediana pendiente (t/ha/anio): 0,0000 | [0,0000; 0,0000] | la tendencia no es medible en las series con valores repetidos | **firme** |
+| H1 Tendencia (Arroz) | `H1` | 86 | W = 1.540,50 | 0,7030 | 0,7938 | mediana pendiente (t/ha/anio): 0,0000 (0,00 %/año) | [-0,0231; 0,0248] ([-0,46 %; 0,86 %]) | sin evidencia de tendencia (equivalencia practica +/- 1 % anual) | **firme** |
+| H1 Tendencia (Maíz) | `H1` | 180 | W = 4.659,50 | 0,0183 | 0,0549 | mediana pendiente (t/ha/anio): 0,0000 (0,00 %/año) | [-0,0183; 0,0000] ([-0,64 %; 0,00 %]) | sin evidencia de tendencia en escenario base; tendencia negativa estadisticamente significativa solo al excluir series poco informativas, de magnitud practicamente despreciable (-0,17 % anual) | **fragil** (umbral_300ha, sin_2019, sin_2021, sin_2022, sin_2023, sin_2025, sin_poco_informativas_D7) |
+| H1 Tendencia (Yuca) | `H1` | 172 | W = 3.363,00 | 0,3969 | 0,7938 | mediana pendiente (t/ha/anio): 0,0000 (0,00 %/año) | [0,0000; 0,0000] ([0,00 %; 0,00 %]) | la tendencia no es medible por la repeticion de valores | **firme** |
 | H2 Brecha tecnologica en maiz (tecnificado vs tradicional) | `H2` | 60 | W = 27,00 | < 0,0001 | < 0,0001 | razon Hodges-Lehmann: 1,6729 | [1,5483; 1,8017] | diferencia significativa (tecnificado > tradicional) | **firme** |
 | H3 Arroz (riego vs secano_mecanizado) | `H3` | 5 | W = 0,00 | 0,0625 | 0,0625 | razon Hodges-Lehmann: 1,1377 | [1,0609; 1,2133] | insuficiente (n < 6, D6) | **insuficiente** |
 | H3 Arroz (riego vs secano_manual) | `H3` | 10 | W = 0,00 | 0,0020 | 0,0039 | razon Hodges-Lehmann: 2,0190 | [1,6288; 2,7345] | diferencia significativa (razon mayor a 1) | **firme** |
@@ -53,9 +53,9 @@
 
 | Hipótesis (sensibilidad post-hoc D7) | Familia | n (sin poco informativas) | Estadístico | p | p ajustado | Efecto | Intervalo de 95 % | Decisión en sensibilidad D7 |
 | :--- | :---: | ---: | :--- | ---: | ---: | :--- | :---: | :--- |
-| H1 Tendencia (Arroz) | `H1` | 79 | W = 1.388,50 | 0,8472 | 0,9007 | mediana pendiente (t/ha/anio): 0,0000 | [-0,0272; 0,0313] | sin evidencia de tendencia |
-| H1 Tendencia (Maíz) | `H1` | 167 | W = 4.416,00 | 0,0141 | 0,0422 | mediana pendiente (t/ha/anio): -0,0016 | [-0,0231; 0,0000] | tendencia negativa significativa |
-| H1 Tendencia (Yuca) | `H1` | 112 | W = 2.212,50 | 0,4504 | 0,9007 | mediana pendiente (t/ha/anio): 0,0000 | [-0,0659; 0,0581] | la tendencia no es medible en las series con valores repetidos |
+| H1 Tendencia (Arroz) | `H1` | 79 | W = 1.388,50 | 0,8472 | 0,9007 | mediana pendiente (t/ha/anio): 0,0000 (0,00 %/año) | [-0,0272; 0,0313] ([-0,61 %; 1,28 %]) | sin evidencia de tendencia |
+| H1 Tendencia (Maíz) | `H1` | 167 | W = 4.416,00 | 0,0141 | 0,0422 | mediana pendiente (t/ha/anio): -0,0016 (-0,17 %/año) | [-0,0231; 0,0000] ([-1,19 %; 0,00 %]) | tendencia negativa estadisticamente significativa solo al excluir series poco informativas, de magnitud practicamente despreciable (-0,17 % anual) |
+| H1 Tendencia (Yuca) | `H1` | 112 | W = 2.212,50 | 0,4504 | 0,9007 | mediana pendiente (t/ha/anio): 0,0000 (0,00 %/año) | [-0,0659; 0,0581] ([-0,34 %; 0,60 %]) | la tendencia no es medible por la repeticion de valores |
 | H5 Variabilidad interanual CV (Friedman 3 cultivos) | `H5` | 46 | chi2_F = 0,39 | 0,8223 | 0,8223 | W de Kendall: 0,0043 | [0,0005; 0,0940] | sin evidencia de diferencia de variabilidad |
 | H5 Variabilidad CV (Arroz vs Maíz) | `H5` | 46 | W = 462,00 | 0,3976 | 0,9700 | diferencia HL de CV: -0,0190 | [-0,0630; 0,0207] | sin evidencia de diferencia de variabilidad |
 | H5 Variabilidad CV (Arroz vs Yuca) | `H5` | 46 | W = 449,00 | 0,3233 | 0,9700 | diferencia HL de CV: -0,0302 | [-0,0904; 0,0275] | sin evidencia de diferencia de variabilidad |
@@ -64,7 +64,7 @@
 ## 3. Interpretación por familia de hipótesis (lenguaje de asociación observada)
 
 ### H1. Tendencia temporal del rendimiento municipal (2019-2025)
-En los municipios elegibles de la Región Caribe la pendiente mediana de Theil-Sen es 0,0000 t/ha/año debido a la alta proporción de años consecutivos con rendimiento administrativo repetido (que genera pendientes exactamente nulas descartadas por Wilcoxon con `zero_method='wilcox'`); conforme a D7, la tendencia no es medible en las series con valores repetidos y no debe interpretarse como equivalencia práctica, siendo además frágil en maíz (donde al excluir las series poco informativas o ampliar a 300 ha emerge una ligera pendiente negativa estadísticamente significativa).
+Aplicando la regla de decisión por cultivo de D7: (1) en **arroz**, la sensibilidad D7 no cambia la conclusión (p ajustado = 0,7938 en base y 0,9007 en D7) y el intervalo de confianza al 95 % de la pendiente relativa en el escenario base ([-0,46 %; +0,86 %] anual) queda contenido dentro de +/- 1 % anual, por lo que la decisión es **sin evidencia de tendencia (equivalencia práctica +/- 1 % anual)**; (2) en **maíz**, la prueba principal no alcanza significancia tras la corrección de Holm (p ajustado = 0,0549), pero al excluir las 13 series poco informativas en D7 (n = 167) pasa a p ajustado = 0,0422 con pendiente mediana de -0,0016 t/ha/año (-0,17 % anual sobre el rendimiento medio municipal, IC 95 %: [-1,19 %; 0,00 %]; -0,08 % del rendimiento mediano municipal de 2,00 t/ha), por lo que se reportan ambos resultados: **tendencia negativa estadísticamente significativa solo al excluir series poco informativas, de magnitud prácticamente despreciable (-0,17 % anual)**; y (3) en **yuca**, dada la repetición de valores (45,75 % de pares consecutivos idénticos y 29,65 % de pendientes exactamente nulas), se mantiene que **la tendencia no es medible por la repetición de valores**.
 
 ### H2. Brecha tecnológica observada en maíz (tecnificado vs. tradicional)
 En los municipios elegibles que registran ambos sistemas de maíz en los mismos años (60 municipios, 368 pares municipio-año), el sistema tecnificado se asocia de forma firme con un rendimiento superior al tradicional, con una razón de Hodges-Lehmann de 1,67 veces (IC 95 %: 1,55 a 1,80; razón mediana 1,66) que se mantiene en todas las variantes de sensibilidad.
@@ -83,3 +83,31 @@ En el análisis exploratorio climático (corregido por Benjamini-Hochberg), ni l
 
 ### E2. Análisis exploratorio del quiebre 2022 en la tasa de área no cosechada
 Tras excluir los municipios con área cosechada acumulada superior a la sembrada (D4), la comparación exploratoria entre 2022-2025 y 2019-2021 muestra un incremento estadísticamente significativo y firme en la tasa de área no cosechada de yuca (+4,65 puntos porcentuales; FDR = 0,0004), el cual se interpreta como desfase asociado al ciclo vegetativo largo del cultivo tras el cambio metodológico de 2022 (D3) y no como pérdida; en maíz no se observa cambio significativo (firme) y en arroz el resultado base no significativo es sensible a la exclusión de 2021 (frágil).
+
+## 4. Análisis descriptivo de concentración del área no cosechada de arroz en 2021 (D8)
+
+- **Área no cosechada regional de arroz en 2021**: `36.766,30 ha` sobre `155.552,00 ha` sembradas (`23,64 %`).
+- **Aporte de los 5 municipios con mayor área no cosechada**: `27.725,00 ha` (**`75,41 %`** del total regional).
+- **Aporte de los 10 municipios con mayor área no cosechada**: `32.750,00 ha` (**`89,08 %`** del total regional).
+- *Nota metodológica (D8)*: descripción estrictamente geográfica sin atribución causal climática.
+
+| Rango | Código DANE | Municipio | Departamento | Área sembrada 2021 (ha) | Área cosechada 2021 (ha) | Área no cosechada 2021 (ha) | Tasa propia no cosechada (%) | % del total regional | % acumulado regional |
+| ---: | :---: | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | `70429` | Majagual | Sucre | 20.620,00 | 9.709,00 | 10.911,00 | 52,91 % | 29,68 % | 29,68 % |
+| 2 | `23068` | Ayapel | Córdoba | 6.450,00 | 950,00 | 5.500,00 | 85,27 % | 14,96 % | 44,64 % |
+| 3 | `13006` | Achí | Bolívar | 14.838,00 | 9.629,00 | 5.209,00 | 35,11 % | 14,17 % | 58,80 % |
+| 4 | `70265` | Guaranda | Sucre | 14.534,00 | 10.529,00 | 4.005,00 | 27,56 % | 10,89 % | 69,70 % |
+| 5 | `70708` | San Marcos | Sucre | 5.350,00 | 3.250,00 | 2.100,00 | 39,25 % | 5,71 % | 75,41 % |
+| 6 | `13655` | San Jacinto del Cauca | Bolívar | 10.700,00 | 9.500,00 | 1.200,00 | 11,21 % | 3,26 % | 78,67 % |
+| 7 | `70678` | San Benito Abad | Sucre | 4.980,00 | 3.832,00 | 1.148,00 | 23,05 % | 3,12 % | 81,80 % |
+| 8 | `70124` | Caimito | Sucre | 1.280,00 | 155,00 | 1.125,00 | 87,89 % | 3,06 % | 84,85 % |
+| 9 | `13458` | Montecristo | Bolívar | 3.350,00 | 2.452,00 | 898,00 | 26,81 % | 2,44 % | 87,30 % |
+| 10 | `70771` | Sucre | Sucre | 1.584,00 | 930,00 | 654,00 | 41,29 % | 1,78 % | 89,08 % |
+
+## 5. Niveles de evidencia por cultivo y resumen municipal (D9)
+
+| Cultivo | Pares consecutivos | Pares idénticos (%) | Filas semestrales (`> 0 ha`) | Rendimientos enteros (`,00`) (%) | Nivel de evidencia del cultivo | Municipios `alto` | Municipios `medio` | Municipios `bajo` |
+| :--- | ---: | ---: | ---: | ---: | :---: | ---: | ---: | ---: |
+| **Arroz** | 606 | 109 (17,99 %) | 1.622 | 459 (28,30 %) | **`alto`** | 64 | 28 | 19 |
+| **Maíz** | 1.130 | 215 (19,03 %) | 4.405 | 1.645 (37,34 %) | **`alto`** | 119 | 49 | 25 |
+| **Yuca** | 1.117 | 511 (45,75 %) | 2.378 | 2.166 (91,08 %) | **`bajo`** | 38 | 76 | 79 |
