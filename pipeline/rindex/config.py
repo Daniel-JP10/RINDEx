@@ -16,6 +16,7 @@ CAMPOS_RAIZ_OBLIGATORIOS: tuple[str, ...] = (
     "anios",
     "fuente",
     "parametros",
+    "clima",
     "mapeo_desagregacion",
     "limites_plausibilidad_rendimiento",
 )
@@ -31,9 +32,16 @@ CAMPOS_FUENTE_OBLIGATORIOS: tuple[str, ...] = (
 CAMPOS_PARAMETROS_OBLIGATORIOS: tuple[str, ...] = (
     "semilla_aleatoria",
     "replicas_bootstrap",
+    "bootstrap_robustez",
     "area_cosechada_minima_ha",
     "anios_minimos_con_dato",
     "umbral_z_robusto",
+)
+
+CAMPOS_CLIMA_OBLIGATORIOS: tuple[str, ...] = (
+    "url_oni",
+    "umbral_oni",
+    "regla_anual",
 )
 
 
@@ -65,10 +73,20 @@ class ConfigFuente:
 class ConfigParametros:
     semilla_aleatoria: int
     replicas_bootstrap: int
+    bootstrap_robustez: int
     area_cosechada_minima_ha: float
     umbrales_elegibilidad_ha: tuple[float, ...]
     anios_minimos_con_dato: int
     umbral_z_robusto: float
+
+
+@dataclass(frozen=True)
+class ConfigClima:
+    url_oni: str
+    archivo_local: str
+    parquet_anual: str
+    umbral_oni: float
+    regla_anual: str
 
 
 @dataclass(frozen=True)
@@ -95,6 +113,7 @@ class ConfiguracionEdicion:
     anios: RangoAnios
     fuente: ConfigFuente
     parametros: ConfigParametros
+    clima: ConfigClima
     mapeo_desagregacion: dict[str, MapeoDesagregacionItem]
     limites_plausibilidad_rendimiento: dict[str, LimitePlausibilidad]
 
@@ -166,6 +185,7 @@ def validar_diccionario_config(datos: dict[str, Any]) -> ConfiguracionEdicion:
     _verificar_campos(datos["anios"], CAMPOS_ANIOS_OBLIGATORIOS, prefijo="anios.")
     _verificar_campos(datos["fuente"], CAMPOS_FUENTE_OBLIGATORIOS, prefijo="fuente.")
     _verificar_campos(datos["parametros"], CAMPOS_PARAMETROS_OBLIGATORIOS, prefijo="parametros.")
+    _verificar_campos(datos["clima"], CAMPOS_CLIMA_OBLIGATORIOS, prefijo="clima.")
 
     if not isinstance(datos["departamentos"], dict) or not datos["departamentos"]:
         raise ValueError("El campo 'departamentos' debe ser un diccionario no vacio.")
@@ -218,10 +238,20 @@ def validar_diccionario_config(datos: dict[str, Any]) -> ConfiguracionEdicion:
     parametros = ConfigParametros(
         semilla_aleatoria=int(param_raw["semilla_aleatoria"]),
         replicas_bootstrap=int(param_raw["replicas_bootstrap"]),
+        bootstrap_robustez=int(param_raw["bootstrap_robustez"]),
         area_cosechada_minima_ha=float(param_raw["area_cosechada_minima_ha"]),
         umbrales_elegibilidad_ha=tuple(float(u) for u in umbrales_raw),
         anios_minimos_con_dato=int(param_raw["anios_minimos_con_dato"]),
         umbral_z_robusto=float(param_raw["umbral_z_robusto"]),
+    )
+
+    clima_raw = datos["clima"]
+    clima = ConfigClima(
+        url_oni=str(clima_raw["url_oni"]),
+        archivo_local=str(clima_raw.get("archivo_local", "data/raw/oni.ascii.txt")),
+        parquet_anual=str(clima_raw.get("parquet_anual", "data/interim/oni_anual.parquet")),
+        umbral_oni=float(clima_raw["umbral_oni"]),
+        regla_anual=str(clima_raw["regla_anual"]),
     )
 
     mapeo = _validar_mapeo_desagregacion(datos["mapeo_desagregacion"])
@@ -240,6 +270,7 @@ def validar_diccionario_config(datos: dict[str, Any]) -> ConfiguracionEdicion:
         anios=anios,
         fuente=fuente,
         parametros=parametros,
+        clima=clima,
         mapeo_desagregacion=mapeo,
         limites_plausibilidad_rendimiento=limites,
     )

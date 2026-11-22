@@ -41,10 +41,18 @@ def config_base_valida() -> dict[str, Any]:
         "parametros": {
             "semilla_aleatoria": 2026,
             "replicas_bootstrap": 5000,
+            "bootstrap_robustez": 1000,
             "area_cosechada_minima_ha": 500,
             "umbrales_elegibilidad_ha": [300, 500, 1000],
             "anios_minimos_con_dato": 4,
             "umbral_z_robusto": 3.5,
+        },
+        "clima": {
+            "url_oni": "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt",
+            "archivo_local": "data/raw/oni.ascii.txt",
+            "parquet_anual": "data/interim/oni_anual.parquet",
+            "umbral_oni": 0.5,
+            "regla_anual": "media de las 12 temporadas moviles del anio",
         },
         "mapeo_desagregacion": {
             "Arroz riego": {"cultivo": "Arroz", "sistema": "riego", "color": "no_aplica"},
@@ -120,9 +128,11 @@ def test_cargar_configuracion_real_valida() -> None:
     assert cfg.anios.fin == 2025
     assert cfg.parametros.semilla_aleatoria == 2026
     assert cfg.parametros.replicas_bootstrap == 5000
+    assert cfg.parametros.bootstrap_robustez == 1000
     assert cfg.parametros.area_cosechada_minima_ha == 500.0
     assert cfg.parametros.anios_minimos_con_dato == 4
     assert cfg.parametros.umbral_z_robusto == 3.5
+    assert cfg.clima.umbral_oni == 0.5
     assert len(cfg.mapeo_desagregacion) == 11
     assert cfg.limites_plausibilidad_rendimiento["Maíz"].minimo == 0.2
     assert cfg.limites_plausibilidad_rendimiento["Yuca"].maximo == 40.0
@@ -140,6 +150,7 @@ def test_cargar_configuracion_real_valida() -> None:
         "anios",
         "fuente",
         "parametros",
+        "clima",
         "mapeo_desagregacion",
         "limites_plausibilidad_rendimiento",
     ],

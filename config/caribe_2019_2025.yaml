@@ -37,6 +37,7 @@ fuente:
 parametros:
   semilla_aleatoria: 2026
   replicas_bootstrap: 5000
+  bootstrap_robustez: 1000
   area_cosechada_minima_ha: 500
   umbrales_elegibilidad_ha:
     - 300
@@ -44,6 +45,13 @@ parametros:
     - 1000
   anios_minimos_con_dato: 4
   umbral_z_robusto: 3.5
+
+clima:
+  url_oni: "https://www.cpc.ncep.noaa.gov/data/indices/oni.ascii.txt"
+  archivo_local: "data/raw/oni.ascii.txt"
+  parquet_anual: "data/interim/oni_anual.parquet"
+  umbral_oni: 0.5
+  regla_anual: "media de las 12 temporadas moviles del anio: nina <= -0.5, nino >= 0.5, neutro en otro caso"
 
 mapeo_desagregacion:
   "Arroz riego":
