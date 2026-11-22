@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Municipios por cultivo (Maiz)",
+  "type": "object",
+  "required": ["version_esquema", "cultivo", "nivel_evidencia_cultivo", "municipios"],
+  "additionalProperties": false,
+  "properties": {
+    "version_esquema": { "type": "string" },
+    "cultivo": { "type": "string" },
+    "nivel_evidencia_cultivo": { "type": "string", "enum": ["alto", "medio", "bajo"] },
+    "municipios": {
+      "type": "array",
+      "minItems": 195,
+      "maxItems": 195,
+      "items": {
+        "type": "object",
+        "required": [
+          "codigo",
+          "nombre",
+          "codigo_departamento",
+          "departamento",
+          "con_datos",
+          "elegible",
+          "anios_con_dato",
+          "area_sembrada_ha",
+          "area_cosechada_ha",
+          "produccion_t",
+          "rendimiento_tha",
+          "tasa_area_no_cosechada_pct",
+          "cv_interanual_pct",
+          "nivel_evidencia",
+          "calidad",
+          "rendimiento_por_sistema",
+          "serie_anual",
+          "brecha",
+          "priorizacion"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "codigo": { "type": "string", "pattern": "^[0-9]{5}$" },
+          "nombre": { "type": "string" },
+          "codigo_departamento": { "type": "string", "pattern": "^[0-9]{2}$" },
+          "departamento": { "type": "string" },
+          "con_datos": { "type": "boolean" },
+          "elegible": { "type": "boolean" },
+          "anios_con_dato": { "type": "integer", "minimum": 0 },
+          "area_sembrada_ha": { "type": "integer", "minimum": 0 },
+          "area_cosechada_ha": { "type": "integer", "minimum": 0 },
+          "produccion_t": { "type": "integer", "minimum": 0 },
+          "rendimiento_tha": { "type": ["number", "null"] },
+          "tasa_area_no_cosechada_pct": { "type": ["number", "null"] },
+          "cv_interanual_pct": { "type": ["number", "null"] },
+          "nivel_evidencia": { "type": "string", "enum": ["alto", "medio", "bajo", "sin_datos"] },
+          "calidad": {
+            "type": "object",
+            "required": [
+              "proporcion_repetidos_pct",
+              "serie_poco_informativa",
+              "filas_atipicas",
+              "excluido_d4"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "proporcion_repetidos_pct": { "type": "number" },
+              "serie_poco_informativa": { "type": "boolean" },
+              "filas_atipicas": { "type": "integer" },
+              "excluido_d4": { "type": "boolean" }
+            }
+          },
+          "rendimiento_por_sistema": {
+            "type": "object",
+            "additionalProperties": { "type": ["number", "null"] }
+          },
+          "serie_anual": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["anio", "area_sembrada_ha", "area_cosechada_ha", "produccion_t", "rendimiento_tha"],
+              "additionalProperties": false,
+              "properties": {
+                "anio": { "type": "integer" },
+                "area_sembrada_ha": { "type": "integer" },
+                "area_cosechada_ha": { "type": "integer" },
+                "produccion_t": { "type": "integer" },
+                "rendimiento_tha": { "type": ["number", "null"] }
+              }
+            }
+          },
+          "brecha": {
+            "type": "object",
+            "required": ["brecha_relativa_pct", "brecha_p10_tha", "brecha_p50_tha", "brecha_p90_tha", "ganancia_p10_t", "ganancia_p50_t", "ganancia_p90_t"],
+            "additionalProperties": false,
+            "properties": {
+              "brecha_relativa_pct": { "type": ["number", "null"] },
+              "brecha_p10_tha": { "type": ["number", "null"] },
+              "brecha_p50_tha": { "type": ["number", "null"] },
+              "brecha_p90_tha": { "type": ["number", "null"] },
+              "ganancia_p10_t": { "type": ["integer", "null"] },
+              "ganancia_p50_t": { "type": ["integer", "null"] },
+              "ganancia_p90_t": { "type": ["integer", "null"] }
+            }
+          },
+          "priorizacion": {
+            "type": "object",
+            "required": [
+              "cuadrante",
+              "indice_prioridad",
+              "rango",
+              "rango_p10",
+              "rango_p90",
+              "proporcion_top20_pct",
+              "prioridad_robusta"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "cuadrante": { "type": ["string", "null"] },
+              "indice_prioridad": { "type": ["number", "null"] },
+              "rango": { "type": ["integer", "null"] },
+              "rango_p10": { "type": ["number", "null"] },
+              "rango_p90": { "type": ["number", "null"] },
+              "proporcion_top20_pct": { "type": ["number", "null"] },
+              "prioridad_robusta": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Brechas tecnologicas por departamento y municipio para grafico de mancuerna",
+  "type": "object",
+  "required": ["version_esquema", "departamentos", "municipios"],
+  "additionalProperties": false,
+  "properties": {
+    "version_esquema": { "type": "string" },
+    "departamentos": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "codigo_departamento",
+          "departamento",
+          "cultivo",
+          "sistemas"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "codigo_departamento": { "type": "string", "pattern": "^[0-9]{2}$" },
+          "departamento": { "type": "string" },
+          "cultivo": { "type": "string" },
+          "sistemas": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": ["area_cosechada_ha", "produccion_t", "rendimiento_tha", "municipios_con_dato"],
+              "additionalProperties": false,
+              "properties": {
+                "area_cosechada_ha": { "type": "integer" },
+                "produccion_t": { "type": "integer" },
+                "rendimiento_tha": { "type": ["number", "null"] },
+                "municipios_con_dato": { "type": "integer" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "municipios": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "codigo",
+          "nombre",
+          "codigo_departamento",
+          "departamento",
+          "cultivo",
+          "elegible",
+          "sistemas"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "codigo": { "type": "string", "pattern": "^[0-9]{5}$" },
+          "nombre": { "type": "string" },
+          "codigo_departamento": { "type": "string", "pattern": "^[0-9]{2}$" },
+          "departamento": { "type": "string" },
+          "cultivo": { "type": "string" },
+          "elegible": { "type": "boolean" },
+          "sistemas": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": ["area_cosechada_ha", "produccion_t", "rendimiento_tha", "anios_con_dato"],
+              "additionalProperties": false,
+              "properties": {
+                "area_cosechada_ha": { "type": "integer" },
+                "produccion_t": { "type": "integer" },
+                "rendimiento_tha": { "type": ["number", "null"] },
+                "anios_con_dato": { "type": "integer" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

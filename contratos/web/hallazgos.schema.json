@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tarjetas de hallazgos estadisticos y de priorizacion",
+  "type": "object",
+  "required": ["version_esquema", "tarjetas"],
+  "additionalProperties": false,
+  "properties": {
+    "version_esquema": { "type": "string" },
+    "tarjetas": {
+      "type": "array",
+      "minItems": 15,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "cultivo",
+          "texto_decisor",
+          "texto_tecnico",
+          "cifra",
+          "unidad",
+          "intervalo",
+          "n",
+          "prueba",
+          "p_ajustado",
+          "robustez",
+          "nivel_evidencia",
+          "origen"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 2 },
+          "cultivo": { "type": "string" },
+          "texto_decisor": { "type": "string", "minLength": 10 },
+          "texto_tecnico": { "type": "string", "minLength": 10 },
+          "cifra": { "type": "number" },
+          "unidad": { "type": "string" },
+          "intervalo": {
+            "type": ["array", "null"],
+            "minItems": 2,
+            "maxItems": 2,
+            "items": { "type": "number" }
+          },
+          "n": { "type": "integer", "minimum": 0 },
+          "prueba": { "type": "string" },
+          "p_ajustado": { "type": ["number", "null"] },
+          "robustez": { "type": "string" },
+          "nivel_evidencia": { "type": "string", "enum": ["alto", "medio", "bajo"] },
+          "origen": {
+            "type": "object",
+            "required": ["parquet", "funcion", "columna_cifra"],
+            "additionalProperties": false,
+            "properties": {
+              "parquet": { "type": "string" },
+              "funcion": { "type": "string" },
+              "columna_cifra": { "type": "string" },
+              "filtro": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

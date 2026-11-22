@@ -5,7 +5,7 @@
 - **Umbral de elegibilidad**: `500 ha` y `4` años con dato
 - **Pesos por defecto del índice (0-100)**: ganancia `0,40`, brecha relativa `0,30`, estabilidad `0,15`, confiabilidad `0,15`
 - **Sensibilidad de pesos**: `2.000` juegos Dirichlet(1, 1, 1, 1) con semilla `2026`
-- **Tiempo total de ejecución**: `5,19 s`
+- **Tiempo total de ejecución**: `5,94 s`
 
 ## 1. Validaciones cruzadas de consistencia matemática
 

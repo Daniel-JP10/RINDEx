@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Resumen de calidad de series, redondeo y niveles de evidencia",
+  "type": "object",
+  "required": [
+    "version_esquema",
+    "por_cultivo",
+    "resumen_evidencia_municipal",
+    "arroz_2021_concentracion"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version_esquema": { "type": "string" },
+    "por_cultivo": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "required": [
+          "cultivo",
+          "series_evaluadas",
+          "pares_consecutivos",
+          "pares_identicos",
+          "pct_pares_identicos",
+          "series_poco_informativas",
+          "filas_semestrales",
+          "filas_enteras_semestral",
+          "pct_rendimientos_enteros",
+          "pct_enteros_anual",
+          "nivel_evidencia"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "cultivo": { "type": "string" },
+          "series_evaluadas": { "type": "integer" },
+          "pares_consecutivos": { "type": "integer" },
+          "pares_identicos": { "type": "integer" },
+          "pct_pares_identicos": { "type": "number" },
+          "series_poco_informativas": { "type": "integer" },
+          "filas_semestrales": { "type": "integer" },
+          "filas_enteras_semestral": { "type": "integer" },
+          "pct_rendimientos_enteros": { "type": "number" },
+          "pct_enteros_anual": { "type": "number" },
+          "nivel_evidencia": { "type": "string", "enum": ["alto", "medio", "bajo"] }
+        }
+      }
+    },
+    "resumen_evidencia_municipal": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["cultivo", "alto", "medio", "bajo", "total_con_datos"],
+        "additionalProperties": false,
+        "properties": {
+          "cultivo": { "type": "string" },
+          "alto": { "type": "integer" },
+          "medio": { "type": "integer" },
+          "bajo": { "type": "integer" },
+          "total_con_datos": { "type": "integer" }
+        }
+      }
+    },
+    "arroz_2021_concentracion": {
+      "type": "object",
+      "required": [
+        "area_sembrada_regional_ha",
+        "area_cosechada_regional_ha",
+        "area_no_cosechada_regional_ha",
+        "tasa_regional_pct",
+        "top5_area_no_cosechada_ha",
+        "top5_pct_regional",
+        "top10_area_no_cosechada_ha",
+        "top10_pct_regional",
+        "top10_municipios"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "area_sembrada_regional_ha": { "type": "integer" },
+        "area_cosechada_regional_ha": { "type": "integer" },
+        "area_no_cosechada_regional_ha": { "type": "integer" },
+        "tasa_regional_pct": { "type": "number" },
+        "top5_area_no_cosechada_ha": { "type": "integer" },
+        "top5_pct_regional": { "type": "number" },
+        "top10_area_no_cosechada_ha": { "type": "integer" },
+        "top10_pct_regional": { "type": "number" },
+        "top10_municipios": {
+          "type": "array",
+          "minItems": 10,
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "required": [
+              "rango",
+              "codigo",
+              "nombre",
+              "departamento",
+              "area_sembrada_ha",
+              "area_cosechada_ha",
+              "area_no_cosechada_ha",
+              "tasa_propia_pct",
+              "pct_total_regional"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "rango": { "type": "integer" },
+              "codigo": { "type": "string" },
+              "nombre": { "type": "string" },
+              "departamento": { "type": "string" },
+              "area_sembrada_ha": { "type": "integer" },
+              "area_cosechada_ha": { "type": "integer" },
+              "area_no_cosechada_ha": { "type": "integer" },
+              "tasa_propia_pct": { "type": "number" },
+              "pct_total_regional": { "type": "number" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

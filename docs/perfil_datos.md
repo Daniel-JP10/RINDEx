@@ -84,7 +84,7 @@
 ### Las 10 filas con mayor diferencia relativa en la base filtrada
 
 | Codigo Mpio | Municipio | Depto | Cultivo | Desagregacion | Periodo | Area cosechada (ha) | Produccion (t) | Rend. reportado | Rend. calculado | Dif. absoluta | Dif. relativa (%) |
-| :---: | :--- | :--- | :--- | :--- | :---: | ---: | ---: | ---: | ---: | ---: | ---:|
+| :---: | :--- | :--- | :--- | :--- | :---: | ---: | ---: | ---: | ---: | ---: |---:|
 | `13140` | Calamar | Bolívar | Maíz | Maíz amarillo tradicional | `2023B` | 327,00 | 25,61 | 0,0800 | 0,0783 | 0,0017 | 2,15 % |
 | `13140` | Calamar | Bolívar | Maíz | Maíz blanco tradicional | `2023B` | 72,00 | 5,64 | 0,0800 | 0,0783 | 0,0017 | 2,13 % |
 | `08296` | Galapa | Atlántico | Maíz | Maíz amarillo tradicional | `2021A` | 40,00 | 13,42 | 0,3400 | 0,3355 | 0,0045 | 1,34 % |
