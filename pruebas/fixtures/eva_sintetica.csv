@@ -1,0 +1,12 @@
+Código Dane departamento,Departamento,Código Dane municipio,Municipio,Grupo cultivo,Subgrupo,Cultivo,Desagregación cultivo,Año,Periodo,Área sembrada,Área cosechada,Producción,Rendimiento,Ciclo del cultivo,Estado físico del cultivo,Código del cultivo,Nombre científico del cultivo
+8,Atlántico,8638,Sabanalarga,Cereales,Cereales,Maíz,Maíz Tradicional,2019,2019A,120.0,100.0,250.0,2.5,Transitorio,En grano seco,1050201,Zea mays
+8,Atlántico,8638,Sabanalarga,Tubérculos y plátanos,Raíces y tubérculos,Yuca,Yuca,2020,2020,300.0,280.0,2800.0,10.0,Anual,En fresco,2045800,Manihot esculenta
+13,Bolívar,13244,El Carmen de Bolívar,Cereales,Cereales,Maíz,Maíz Tecnificado,2021,2021B,500.0,480.0,2160.0,4.5,Transitorio,En grano seco,1050101,Zea mays
+20,Cesar,20011,Aguachica,Cereales,Cereales,Arroz,Arroz riego,2022,2022A,800.0,790.0,4740.0,6.0,Transitorio,Paddy verde,1010100,Oryza sativa
+23,Córdoba,23417,Lorica,Cereales,Cereales,Arroz,Arroz secano mecanizado,2023,2023B,650.0,600.0,2700.0,4.5,Transitorio,Paddy verde,1010200,Oryza sativa
+44,La Guajira,44650,San Juan del Cesar,Tubérculos y plátanos,Raíces y tubérculos,Yuca,Yuca,2024,2024,150.0,140.0,1260.0,9.0,Anual,En fresco,2045800,Manihot esculenta
+47,Magdalena,47980,Zona Bananera,Cereales,Cereales,Maíz,Maíz Tradicional,2025,2025A,90.0,85.0,170.0,2.0,Transitorio,En grano seco,1050201,Zea mays
+70,Sucre,70708,San Marcos,Cereales,Cereales,Arroz,Arroz secano manual,2021,2021A,200.0,180.0,540.0,3.0,Transitorio,Paddy verde,1010300,Oryza sativa
+88,Archipiélago de San Andrés Providencia y Santa Catalina,88001,San Andrés,Tubérculos y plátanos,Raíces y tubérculos,Yuca,Yuca,2021,2021,15.0,12.0,96.0,8.0,Anual,En fresco,2045800,Manihot esculenta
+5,Antioquia,5045,Apartadó,Cereales,Cereales,Maíz,Maíz Tecnificado,2021,2021A,400.0,390.0,1950.0,5.0,Transitorio,En grano seco,1050101,Zea mays
+8,Atlántico,8638,Sabanalarga,Frutales,Demas frutales,Mango,Mango,2021,2021,110.0,100.0,1200.0,12.0,Permanente,En fresco,2044200,Mangifera indica

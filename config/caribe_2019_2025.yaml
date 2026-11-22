@@ -1,0 +1,41 @@
+id_edicion: "caribe_2019_2025"
+nombre_visible: "Región Caribe 2019-2025"
+region: "Caribe"
+
+departamentos:
+  "08": "Atlántico"
+  "13": "Bolívar"
+  "20": "Cesar"
+  "23": "Córdoba"
+  "44": "La Guajira"
+  "47": "Magdalena"
+  "70": "Sucre"
+
+departamentos_excluidos:
+  - codigo: "88"
+    nombre: "San Andrés"
+    motivo: "volúmenes marginales y sin comparabilidad con el continente"
+
+cultivos:
+  - "Maíz"
+  - "Yuca"
+  - "Arroz"
+
+anios:
+  inicio: 2019
+  fin: 2025
+
+fuente:
+  archivo_local: "data/raw/eva_2019_2025.xlsx"
+  nombre_original: "Evaluaciones_Agropecuarias_Municipales_–_EVA._2019_-_2025._Base_Agrícola_20261120.xlsx"
+  parquet_crudo: "data/interim/eva_crudo.parquet"
+  parquet_filtrado: "data/interim/eva_filtrada.parquet"
+  manifiesto: "data/raw/manifiesto.json"
+  url_respaldo: "https://www.datos.gov.co/api/views/uejq-wxrr/rows.csv?accessType=DOWNLOAD"
+  ficha: "https://www.datos.gov.co/Agricultura-y-Desarrollo-Rural/Evaluaciones-Agropecuarias-Municipales-EVA-2019-20/uejq-wxrr/about_data"
+
+parametros:
+  semilla_aleatoria: 2026
+  replicas_bootstrap: 5000
+  area_cosechada_minima_ha: 500
+  anios_minimos_con_dato: 4
