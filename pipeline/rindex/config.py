@@ -90,6 +90,25 @@ class ConfigClima:
 
 
 @dataclass(frozen=True)
+class PesosPriorizacion:
+    ganancia: float
+    brecha_relativa: float
+    estabilidad: float
+    confiabilidad: float
+
+
+@dataclass(frozen=True)
+class ConfigPriorizacion:
+    pesos: PesosPriorizacion
+    juegos_dirichlet: int
+    parametros_dirichlet: tuple[float, float, float, float]
+    top_k: int
+    umbral_robustez_top: float
+    minimo_municipios_referencia_depto: int
+    percentil_referencia: float
+
+
+@dataclass(frozen=True)
 class MapeoDesagregacionItem:
     cultivo: str
     sistema: str
@@ -114,6 +133,7 @@ class ConfiguracionEdicion:
     fuente: ConfigFuente
     parametros: ConfigParametros
     clima: ConfigClima
+    priorizacion: ConfigPriorizacion
     mapeo_desagregacion: dict[str, MapeoDesagregacionItem]
     limites_plausibilidad_rendimiento: dict[str, LimitePlausibilidad]
 
@@ -178,6 +198,35 @@ def _validar_limites_plausibilidad(
         if cultivo not in resultado:
             raise ValueError(f"Faltan limites de plausibilidad para el cultivo '{cultivo}'.")
     return resultado
+
+
+def _validar_priorizacion(raw_prio: Any) -> ConfigPriorizacion:
+    if not isinstance(raw_prio, dict):
+        raw_prio = {}
+    pesos_raw = raw_prio.get("pesos", {})
+    pesos = PesosPriorizacion(
+        ganancia=float(pesos_raw.get("ganancia", 0.40)),
+        brecha_relativa=float(pesos_raw.get("brecha_relativa", 0.30)),
+        estabilidad=float(pesos_raw.get("estabilidad", 0.15)),
+        confiabilidad=float(pesos_raw.get("confiabilidad", 0.15)),
+    )
+    param_dir = raw_prio.get("parametros_dirichlet", [1.0, 1.0, 1.0, 1.0])
+    return ConfigPriorizacion(
+        pesos=pesos,
+        juegos_dirichlet=int(raw_prio.get("juegos_dirichlet", 2000)),
+        parametros_dirichlet=(
+            float(param_dir[0]),
+            float(param_dir[1]),
+            float(param_dir[2]),
+            float(param_dir[3]),
+        ),
+        top_k=int(raw_prio.get("top_k", 20)),
+        umbral_robustez_top=float(raw_prio.get("umbral_robustez_top", 0.80)),
+        minimo_municipios_referencia_depto=int(
+            raw_prio.get("minimo_municipios_referencia_depto", 5)
+        ),
+        percentil_referencia=float(raw_prio.get("percentil_referencia", 75.0)),
+    )
 
 
 def validar_diccionario_config(datos: dict[str, Any]) -> ConfiguracionEdicion:
@@ -254,6 +303,7 @@ def validar_diccionario_config(datos: dict[str, Any]) -> ConfiguracionEdicion:
         regla_anual=str(clima_raw["regla_anual"]),
     )
 
+    priorizacion = _validar_priorizacion(datos.get("priorizacion"))
     mapeo = _validar_mapeo_desagregacion(datos["mapeo_desagregacion"])
     limites = _validar_limites_plausibilidad(
         datos["limites_plausibilidad_rendimiento"],
@@ -271,6 +321,7 @@ def validar_diccionario_config(datos: dict[str, Any]) -> ConfiguracionEdicion:
         fuente=fuente,
         parametros=parametros,
         clima=clima,
+        priorizacion=priorizacion,
         mapeo_desagregacion=mapeo,
         limites_plausibilidad_rendimiento=limites,
     )
