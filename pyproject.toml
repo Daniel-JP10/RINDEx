@@ -28,7 +28,7 @@ packages = ["pipeline/rindex"]
 
 [tool.pytest.ini_options]
 testpaths = ["pruebas"]
-pythonpath = ["pipeline"]
+pythonpath = ["pipeline", "pruebas"]
 
 [tool.ruff]
 target-version = "py312"

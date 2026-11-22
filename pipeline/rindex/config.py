@@ -16,6 +16,8 @@ CAMPOS_RAIZ_OBLIGATORIOS: tuple[str, ...] = (
     "anios",
     "fuente",
     "parametros",
+    "mapeo_desagregacion",
+    "limites_plausibilidad_rendimiento",
 )
 
 CAMPOS_ANIOS_OBLIGATORIOS: tuple[str, ...] = ("inicio", "fin")
@@ -31,6 +33,7 @@ CAMPOS_PARAMETROS_OBLIGATORIOS: tuple[str, ...] = (
     "replicas_bootstrap",
     "area_cosechada_minima_ha",
     "anios_minimos_con_dato",
+    "umbral_z_robusto",
 )
 
 
@@ -63,7 +66,22 @@ class ConfigParametros:
     semilla_aleatoria: int
     replicas_bootstrap: int
     area_cosechada_minima_ha: float
+    umbrales_elegibilidad_ha: tuple[float, ...]
     anios_minimos_con_dato: int
+    umbral_z_robusto: float
+
+
+@dataclass(frozen=True)
+class MapeoDesagregacionItem:
+    cultivo: str
+    sistema: str
+    color: str
+
+
+@dataclass(frozen=True)
+class LimitePlausibilidad:
+    minimo: float
+    maximo: float
 
 
 @dataclass(frozen=True)
@@ -77,6 +95,8 @@ class ConfiguracionEdicion:
     anios: RangoAnios
     fuente: ConfigFuente
     parametros: ConfigParametros
+    mapeo_desagregacion: dict[str, MapeoDesagregacionItem]
+    limites_plausibilidad_rendimiento: dict[str, LimitePlausibilidad]
 
 
 def _verificar_campos(
@@ -93,6 +113,54 @@ def _verificar_campos(
             raise ValueError(f"Falta el campo obligatorio en la configuracion: '{ruta_campo}'.")
 
 
+def _validar_mapeo_desagregacion(
+    raw_mapeo: Any,
+) -> dict[str, MapeoDesagregacionItem]:
+    if not isinstance(raw_mapeo, dict) or not raw_mapeo:
+        raise ValueError("El campo 'mapeo_desagregacion' debe ser un diccionario no vacio.")
+    resultado: dict[str, MapeoDesagregacionItem] = {}
+    for clave, item in raw_mapeo.items():
+        _verificar_campos(
+            item,
+            ("cultivo", "sistema", "color"),
+            prefijo=f"mapeo_desagregacion.{clave}.",
+        )
+        resultado[str(clave)] = MapeoDesagregacionItem(
+            cultivo=str(item["cultivo"]),
+            sistema=str(item["sistema"]),
+            color=str(item["color"]),
+        )
+    return resultado
+
+
+def _validar_limites_plausibilidad(
+    raw_limites: Any,
+    cultivos: tuple[str, ...],
+) -> dict[str, LimitePlausibilidad]:
+    if not isinstance(raw_limites, dict) or not raw_limites:
+        raise ValueError(
+            "El campo 'limites_plausibilidad_rendimiento' debe ser un diccionario no vacio."
+        )
+    resultado: dict[str, LimitePlausibilidad] = {}
+    for cultivo, item in raw_limites.items():
+        _verificar_campos(
+            item,
+            ("minimo", "maximo"),
+            prefijo=f"limites_plausibilidad_rendimiento.{cultivo}.",
+        )
+        minimo = float(item["minimo"])
+        maximo = float(item["maximo"])
+        if minimo < 0 or minimo >= maximo:
+            raise ValueError(
+                f"Limites de plausibilidad invalidos para '{cultivo}': [{minimo}, {maximo}]."
+            )
+        resultado[str(cultivo)] = LimitePlausibilidad(minimo=minimo, maximo=maximo)
+    for cultivo in cultivos:
+        if cultivo not in resultado:
+            raise ValueError(f"Faltan limites de plausibilidad para el cultivo '{cultivo}'.")
+    return resultado
+
+
 def validar_diccionario_config(datos: dict[str, Any]) -> ConfiguracionEdicion:
     _verificar_campos(datos, CAMPOS_RAIZ_OBLIGATORIOS)
     _verificar_campos(datos["anios"], CAMPOS_ANIOS_OBLIGATORIOS, prefijo="anios.")
@@ -107,6 +175,7 @@ def validar_diccionario_config(datos: dict[str, Any]) -> ConfiguracionEdicion:
         raise ValueError("El campo 'departamentos_excluidos' debe ser una lista.")
 
     departamentos = {str(k).zfill(2): str(v) for k, v in datos["departamentos"].items()}
+    cultivos = tuple(str(c) for c in datos["cultivos"])
 
     excluidos: list[DepartamentoExcluido] = []
     for idx, item in enumerate(datos["departamentos_excluidos"]):
@@ -145,11 +214,20 @@ def validar_diccionario_config(datos: dict[str, Any]) -> ConfiguracionEdicion:
     )
 
     param_raw = datos["parametros"]
+    umbrales_raw = param_raw.get("umbrales_elegibilidad_ha", [300, 500, 1000])
     parametros = ConfigParametros(
         semilla_aleatoria=int(param_raw["semilla_aleatoria"]),
         replicas_bootstrap=int(param_raw["replicas_bootstrap"]),
         area_cosechada_minima_ha=float(param_raw["area_cosechada_minima_ha"]),
+        umbrales_elegibilidad_ha=tuple(float(u) for u in umbrales_raw),
         anios_minimos_con_dato=int(param_raw["anios_minimos_con_dato"]),
+        umbral_z_robusto=float(param_raw["umbral_z_robusto"]),
+    )
+
+    mapeo = _validar_mapeo_desagregacion(datos["mapeo_desagregacion"])
+    limites = _validar_limites_plausibilidad(
+        datos["limites_plausibilidad_rendimiento"],
+        cultivos,
     )
 
     return ConfiguracionEdicion(
@@ -158,10 +236,12 @@ def validar_diccionario_config(datos: dict[str, Any]) -> ConfiguracionEdicion:
         region=str(datos["region"]),
         departamentos=departamentos,
         departamentos_excluidos=tuple(excluidos),
-        cultivos=tuple(str(c) for c in datos["cultivos"]),
+        cultivos=cultivos,
         anios=anios,
         fuente=fuente,
         parametros=parametros,
+        mapeo_desagregacion=mapeo,
+        limites_plausibilidad_rendimiento=limites,
     )
 
 

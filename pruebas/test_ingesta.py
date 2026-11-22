@@ -7,6 +7,7 @@ import yaml
 
 from rindex.config import cargar_configuracion
 from rindex.ingesta import ejecutar_ingesta
+from test_config import config_base_valida
 
 RUTA_FIXTURE_CSV = Path("pruebas/fixtures/eva_sintetica.csv")
 
@@ -21,44 +22,19 @@ def _preparar_entorno_ingesta(
     ruta_xlsx.parent.mkdir(parents=True, exist_ok=True)
     df_crudo.to_excel(ruta_xlsx, index=False)
 
-    datos_cfg = {
-        "id_edicion": "caribe_sintetico",
-        "nombre_visible": "Caribe Sintetico",
-        "region": "Caribe",
-        "departamentos": {
-            "08": "Atlantico",
-            "13": "Bolivar",
-            "20": "Cesar",
-            "23": "Cordoba",
-            "44": "La Guajira",
-            "47": "Magdalena",
-            "70": "Sucre",
-        },
-        "departamentos_excluidos": [
-            {
-                "codigo": "88",
-                "nombre": "San Andres",
-                "motivo": "volumenes marginales y sin comparabilidad con el continente",
-            }
-        ],
-        "cultivos": ["Maíz", "Yuca", "Arroz"],
-        "anios": {"inicio": anio_inicio, "fin": anio_fin},
-        "fuente": {
+    datos_cfg = config_base_valida()
+    datos_cfg["id_edicion"] = "caribe_sintetico"
+    datos_cfg["nombre_visible"] = "Caribe Sintetico"
+    datos_cfg["anios"] = {"inicio": anio_inicio, "fin": anio_fin}
+    datos_cfg["fuente"].update(
+        {
             "archivo_local": str(ruta_xlsx),
             "nombre_original": "eva_sintetica.xlsx",
             "parquet_crudo": str(tmp_path / "interim" / "eva_crudo.parquet"),
             "parquet_filtrado": str(tmp_path / "interim" / "eva_filtrada.parquet"),
             "manifiesto": str(tmp_path / "raw" / "manifiesto.json"),
-            "url_respaldo": "https://www.datos.gov.co/api/views/uejq-wxrr/rows.csv?accessType=DOWNLOAD",
-            "ficha": "https://www.datos.gov.co/Agricultura-y-Desarrollo-Rural/Evaluaciones-Agropecuarias-Municipales-EVA-2019-20/uejq-wxrr/about_data",
-        },
-        "parametros": {
-            "semilla_aleatoria": 2026,
-            "replicas_bootstrap": 5000,
-            "area_cosechada_minima_ha": 500,
-            "anios_minimos_con_dato": 4,
-        },
-    }
+        }
+    )
     ruta_yaml = tmp_path / "config.yaml"
     ruta_yaml.write_text(yaml.safe_dump(datos_cfg), encoding="utf-8")
     return ruta_yaml, df_crudo

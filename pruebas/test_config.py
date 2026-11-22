@@ -9,7 +9,7 @@ import yaml
 from rindex.config import cargar_configuracion, validar_diccionario_config
 
 
-def _config_base_valida() -> dict[str, Any]:
+def config_base_valida() -> dict[str, Any]:
     return {
         "id_edicion": "caribe_2019_2025",
         "nombre_visible": "Region Caribe 2019-2025",
@@ -42,7 +42,67 @@ def _config_base_valida() -> dict[str, Any]:
             "semilla_aleatoria": 2026,
             "replicas_bootstrap": 5000,
             "area_cosechada_minima_ha": 500,
+            "umbrales_elegibilidad_ha": [300, 500, 1000],
             "anios_minimos_con_dato": 4,
+            "umbral_z_robusto": 3.5,
+        },
+        "mapeo_desagregacion": {
+            "Arroz riego": {"cultivo": "Arroz", "sistema": "riego", "color": "no_aplica"},
+            "Arroz secano manual": {
+                "cultivo": "Arroz",
+                "sistema": "secano_manual",
+                "color": "no_aplica",
+            },
+            "Arroz secano mecanizado": {
+                "cultivo": "Arroz",
+                "sistema": "secano_mecanizado",
+                "color": "no_aplica",
+            },
+            "Maíz amarillo tecnificado": {
+                "cultivo": "Maíz",
+                "sistema": "tecnificado",
+                "color": "amarillo",
+            },
+            "Maíz amarillo tradicional": {
+                "cultivo": "Maíz",
+                "sistema": "tradicional",
+                "color": "amarillo",
+            },
+            "Maíz blanco tecnificado": {
+                "cultivo": "Maíz",
+                "sistema": "tecnificado",
+                "color": "blanco",
+            },
+            "Maíz blanco tradicional": {
+                "cultivo": "Maíz",
+                "sistema": "tradicional",
+                "color": "blanco",
+            },
+            "Maíz tecnificado": {
+                "cultivo": "Maíz",
+                "sistema": "tecnificado",
+                "color": "sin_dato",
+            },
+            "Maíz tradicional": {
+                "cultivo": "Maíz",
+                "sistema": "tradicional",
+                "color": "sin_dato",
+            },
+            "Yuca consumo en fresco": {
+                "cultivo": "Yuca",
+                "sistema": "fresco",
+                "color": "no_aplica",
+            },
+            "Yuca industrial": {
+                "cultivo": "Yuca",
+                "sistema": "industrial",
+                "color": "no_aplica",
+            },
+        },
+        "limites_plausibilidad_rendimiento": {
+            "Maíz": {"minimo": 0.2, "maximo": 12.0},
+            "Arroz": {"minimo": 0.5, "maximo": 12.0},
+            "Yuca": {"minimo": 2.0, "maximo": 40.0},
         },
     }
 
@@ -62,6 +122,10 @@ def test_cargar_configuracion_real_valida() -> None:
     assert cfg.parametros.replicas_bootstrap == 5000
     assert cfg.parametros.area_cosechada_minima_ha == 500.0
     assert cfg.parametros.anios_minimos_con_dato == 4
+    assert cfg.parametros.umbral_z_robusto == 3.5
+    assert len(cfg.mapeo_desagregacion) == 11
+    assert cfg.limites_plausibilidad_rendimiento["Maíz"].minimo == 0.2
+    assert cfg.limites_plausibilidad_rendimiento["Yuca"].maximo == 40.0
 
 
 @pytest.mark.parametrize(
@@ -76,17 +140,19 @@ def test_cargar_configuracion_real_valida() -> None:
         "anios",
         "fuente",
         "parametros",
+        "mapeo_desagregacion",
+        "limites_plausibilidad_rendimiento",
     ],
 )
 def test_error_con_campo_raiz_faltante(campo_faltante: str) -> None:
-    datos = _config_base_valida()
+    datos = config_base_valida()
     del datos[campo_faltante]
     with pytest.raises(ValueError, match=campo_faltante):
         validar_diccionario_config(datos)
 
 
 def test_error_con_subcampo_faltante_en_archivo(tmp_path: Path) -> None:
-    datos = _config_base_valida()
+    datos = config_base_valida()
     del datos["parametros"]["semilla_aleatoria"]
     ruta_yaml = tmp_path / "invalido.yaml"
     ruta_yaml.write_text(yaml.safe_dump(datos), encoding="utf-8")

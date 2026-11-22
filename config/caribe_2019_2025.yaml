@@ -38,4 +38,66 @@ parametros:
   semilla_aleatoria: 2026
   replicas_bootstrap: 5000
   area_cosechada_minima_ha: 500
+  umbrales_elegibilidad_ha:
+    - 300
+    - 500
+    - 1000
   anios_minimos_con_dato: 4
+  umbral_z_robusto: 3.5
+
+mapeo_desagregacion:
+  "Arroz riego":
+    cultivo: "Arroz"
+    sistema: "riego"
+    color: "no_aplica"
+  "Arroz secano manual":
+    cultivo: "Arroz"
+    sistema: "secano_manual"
+    color: "no_aplica"
+  "Arroz secano mecanizado":
+    cultivo: "Arroz"
+    sistema: "secano_mecanizado"
+    color: "no_aplica"
+  "Maíz amarillo tecnificado":
+    cultivo: "Maíz"
+    sistema: "tecnificado"
+    color: "amarillo"
+  "Maíz amarillo tradicional":
+    cultivo: "Maíz"
+    sistema: "tradicional"
+    color: "amarillo"
+  "Maíz blanco tecnificado":
+    cultivo: "Maíz"
+    sistema: "tecnificado"
+    color: "blanco"
+  "Maíz blanco tradicional":
+    cultivo: "Maíz"
+    sistema: "tradicional"
+    color: "blanco"
+  "Maíz tecnificado":
+    cultivo: "Maíz"
+    sistema: "tecnificado"
+    color: "sin_dato"
+  "Maíz tradicional":
+    cultivo: "Maíz"
+    sistema: "tradicional"
+    color: "sin_dato"
+  "Yuca consumo en fresco":
+    cultivo: "Yuca"
+    sistema: "fresco"
+    color: "no_aplica"
+  "Yuca industrial":
+    cultivo: "Yuca"
+    sistema: "industrial"
+    color: "no_aplica"
+
+limites_plausibilidad_rendimiento:
+  "Maíz":
+    minimo: 0.2
+    maximo: 12.0
+  "Arroz":
+    minimo: 0.5
+    maximo: 12.0
+  "Yuca":
+    minimo: 2.0
+    maximo: 40.0

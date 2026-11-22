@@ -8,6 +8,7 @@ import pandas as pd
 
 from rindex.config import ConfiguracionEdicion, validar_diccionario_config
 from rindex.fuente import preparar_fuente_cruda
+from test_config import config_base_valida
 
 RUTA_FIXTURE_CSV = Path("pruebas/fixtures/eva_sintetica.csv")
 
@@ -23,36 +24,19 @@ CAMPOS_MANIFIESTO = {
 
 
 def _crear_config_prueba(tmp_path: Path, ruta_xlsx: Path) -> ConfiguracionEdicion:
-    datos = {
-        "id_edicion": "prueba_caribe",
-        "nombre_visible": "Prueba Caribe",
-        "region": "Caribe",
-        "departamentos": {"08": "Atlantico", "13": "Bolivar"},
-        "departamentos_excluidos": [
-            {
-                "codigo": "88",
-                "nombre": "San Andres",
-                "motivo": "volumenes marginales y sin comparabilidad con el continente",
-            }
-        ],
-        "cultivos": ["Maíz", "Yuca", "Arroz"],
-        "anios": {"inicio": 2019, "fin": 2025},
-        "fuente": {
+    datos = config_base_valida()
+    datos["id_edicion"] = "prueba_caribe"
+    datos["nombre_visible"] = "Prueba Caribe"
+    datos["departamentos"] = {"08": "Atlantico", "13": "Bolivar"}
+    datos["fuente"].update(
+        {
             "archivo_local": str(ruta_xlsx),
             "nombre_original": "EVA_Original_2019_2025.xlsx",
             "parquet_crudo": str(tmp_path / "interim" / "eva_crudo.parquet"),
             "parquet_filtrado": str(tmp_path / "interim" / "eva_filtrada.parquet"),
             "manifiesto": str(tmp_path / "raw" / "manifiesto.json"),
-            "url_respaldo": "https://www.datos.gov.co/api/views/uejq-wxrr/rows.csv?accessType=DOWNLOAD",
-            "ficha": "https://www.datos.gov.co/Agricultura-y-Desarrollo-Rural/Evaluaciones-Agropecuarias-Municipales-EVA-2019-20/uejq-wxrr/about_data",
-        },
-        "parametros": {
-            "semilla_aleatoria": 2026,
-            "replicas_bootstrap": 5000,
-            "area_cosechada_minima_ha": 500,
-            "anios_minimos_con_dato": 4,
-        },
-    }
+        }
+    )
     return validar_diccionario_config(datos)
 
 
