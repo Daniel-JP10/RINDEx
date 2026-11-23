@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { geoMercator, geoPath } from "d3-geo";
-import { scaleThreshold } from "d3-scale";
+import { scaleQuantize, scaleThreshold } from "d3-scale";
 import { select } from "d3-selection";
 import "d3-transition";
 import type { FeatureCollection, Geometry } from "geojson";
@@ -17,6 +17,7 @@ import {
   formatearEntero,
   formatearPorcentaje,
 } from "../utilidades/formato.ts";
+import { coincideFiltrosMunicipio } from "../utilidades/tablero.ts";
 
 interface PropiedadGeo {
   codigo: string;
@@ -24,7 +25,13 @@ interface PropiedadGeo {
   departamento: string;
 }
 
-export type ModoMapaCaribe = "brecha" | "dominante" | "arroz_2021" | "prioriza" | "cierre";
+export type ModoMapaCaribe =
+  | "brecha"
+  | "dominante"
+  | "arroz_2021"
+  | "prioriza"
+  | "cierre"
+  | "anio";
 
 export interface PropsMapaCaribe {
   topoJson: ContratoTopoJsonCaribe;
@@ -33,6 +40,9 @@ export interface PropsMapaCaribe {
   cultivosDominantes?: ReadonlyMap<string, CultivoClave>;
   codigosResaltados?: readonly string[];
   acercarACodigos?: readonly string[];
+  departamentoFiltro?: string | null;
+  cuadranteFiltro?: string | null;
+  anioActivo?: number | null;
   alMedirRender?: (milisegundos: number) => void;
 }
 
@@ -89,6 +99,16 @@ function obtenerTasaNoCosechada2021(mData: MunicipioCultivoItem | undefined): {
   return { tasaPct, noCosechadaHa: diff };
 }
 
+function obtenerRegistroAnual(
+  mData: MunicipioCultivoItem | undefined,
+  anio: number | null,
+) {
+  if (!mData || anio === null) {
+    return null;
+  }
+  return mData.serie_anual.find((s) => s.anio === anio) ?? null;
+}
+
 export function MapaCaribe({
   topoJson,
   datosCultivo,
@@ -96,6 +116,9 @@ export function MapaCaribe({
   cultivosDominantes,
   codigosResaltados = [],
   acercarACodigos = [],
+  departamentoFiltro = null,
+  cuadranteFiltro = null,
+  anioActivo = null,
   alMedirRender,
 }: PropsMapaCaribe): React.JSX.Element {
   const cultivoActivo = usarTiendaRindex((s) => s.cultivoActivo);
@@ -108,8 +131,8 @@ export function MapaCaribe({
   const primerMontajeRef = useRef(true);
 
   const [dimensiones, setDimensiones] = useState<{ ancho: number; alto: number }>({
-    ancho: 720,
-    alto: 460,
+    ancho: 680,
+    alto: 420,
   });
   const [municipioHover, setMunicipioHover] = useState<string | null>(null);
 
@@ -121,7 +144,7 @@ export function MapaCaribe({
     const actualizar = (): void => {
       const anchoMedido = el.clientWidth;
       if (anchoMedido > 120) {
-        const altoCalc = Math.round(Math.max(260, Math.min(480, anchoMedido * 0.64)));
+        const altoCalc = Math.round(Math.max(240, Math.min(440, anchoMedido * 0.62)));
         setDimensiones({ ancho: anchoMedido, alto: altoCalc });
       }
     };
@@ -144,8 +167,10 @@ export function MapaCaribe({
     return false;
   }, [tema]);
 
+  const modoEfectivo: ModoMapaCaribe = anioActivo !== null ? "anio" : modoVisual;
+
   const paleta =
-    modoVisual === "arroz_2021" || modoVisual === "cierre"
+    modoEfectivo === "arroz_2021" || modoEfectivo === "cierre"
       ? PALETAS_SECUENCIALES["Arroz"]
       : PALETAS_SECUENCIALES[cultivoActivo];
 
@@ -161,6 +186,36 @@ export function MapaCaribe({
     }
     return mapa;
   }, [datosCultivo]);
+
+  const rangoRendimientoAnual = useMemo(() => {
+    if (anioActivo === null || !datosCultivo) {
+      return { min: 0, max: 10 };
+    }
+    const valores: number[] = [];
+    for (const m of datosCultivo.municipios) {
+      const reg = m.serie_anual.find((s) => s.anio === anioActivo);
+      if (reg && reg.rendimiento_tha !== null && reg.area_cosechada_ha > 0) {
+        valores.push(reg.rendimiento_tha);
+      }
+    }
+    if (valores.length === 0) {
+      return { min: 0, max: 10 };
+    }
+    const minVal = Math.min(...valores);
+    const maxVal = Math.max(...valores);
+    return {
+      min: minVal,
+      max: maxVal > minVal ? maxVal : minVal + 1,
+    };
+  }, [anioActivo, datosCultivo]);
+
+  const escalaPasoAnual = useMemo(
+    () =>
+      scaleQuantize<number>()
+        .domain([rangoRendimientoAnual.min, rangoRendimientoAnual.max])
+        .range([0, 1, 2, 3, 4]),
+    [rangoRendimientoAnual],
+  );
 
   const { colMpios, colDeptos, objetoAjuste } = useMemo(() => {
     const mpiosCol = feature(
@@ -191,8 +246,8 @@ export function MapaCaribe({
     const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
     const proyeccion = geoMercator().fitExtent(
       [
-        [16, 16],
-        [dimensiones.ancho - 16, dimensiones.alto - 16],
+        [14, 14],
+        [dimensiones.ancho - 14, dimensiones.alto - 14],
       ],
       objetoAjuste as never,
     );
@@ -220,11 +275,20 @@ export function MapaCaribe({
     };
   }, [colMpios, colDeptos, objetoAjuste, dimensiones.ancho, dimensiones.alto]);
 
+  const codigosZoomEfectivos = useMemo(() => {
+    if (departamentoFiltro !== null) {
+      return colMpios.features
+        .filter((f) => f.properties.departamento === departamentoFiltro)
+        .map((f) => f.properties.codigo);
+    }
+    return acercarACodigos;
+  }, [departamentoFiltro, acercarACodigos, colMpios]);
+
   const transformCamara = useMemo(() => {
-    if (acercarACodigos.length === 0) {
+    if (codigosZoomEfectivos.length === 0) {
       return "translate(0px, 0px) scale(1)";
     }
-    const conjuntoZoom = new Set(acercarACodigos);
+    const conjuntoZoom = new Set(codigosZoomEfectivos);
     let minX = Number.POSITIVE_INFINITY;
     let minY = Number.POSITIVE_INFINITY;
     let maxX = Number.NEGATIVE_INFINITY;
@@ -249,14 +313,22 @@ export function MapaCaribe({
     const dy = maxY - minY;
     const cx = (minX + maxX) / 2;
     const cy = (minY + maxY) / 2;
+    const factorMargen = departamentoFiltro !== null ? 0.72 : 0.56;
     const escala = Math.min(
       3.2,
-      Math.max(1.4, 0.56 / Math.max(dx / dimensiones.ancho, dy / dimensiones.alto)),
+      Math.max(1.25, factorMargen / Math.max(dx / dimensiones.ancho, dy / dimensiones.alto)),
     );
     const tx = dimensiones.ancho / 2 - escala * cx;
     const ty = dimensiones.alto / 2 - escala * cy;
     return `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${escala.toFixed(3)})`;
-  }, [acercarACodigos, colMpios, generadorRuta, dimensiones.ancho, dimensiones.alto]);
+  }, [
+    codigosZoomEfectivos,
+    colMpios,
+    generadorRuta,
+    dimensiones.ancho,
+    dimensiones.alto,
+    departamentoFiltro,
+  ]);
 
   useEffect(() => {
     alMedirRender?.(tiempoGeoMs);
@@ -264,6 +336,7 @@ export function MapaCaribe({
 
   const nivelEvidenciaCultivo = datosCultivo?.nivel_evidencia_cultivo ?? "alto";
   const colorNoElegible = esTemaOscuro ? "#3C5447" : "#C9CEBE";
+  const hayFiltroActivo = departamentoFiltro !== null || cuadranteFiltro !== null;
 
   const infoVisualPorCodigo = useMemo(() => {
     const mapa = new Map<
@@ -273,24 +346,53 @@ export function MapaCaribe({
         usaPatronBaja: boolean;
         pasoIndice: number;
         esRobusto: boolean;
+        atenuadoPorFiltro: boolean;
       }
     >();
 
     for (const mGeo of rutasMunicipios) {
-      if (modoVisual === "dominante") {
+      const mData = mapaMunicipiosDatos.get(mGeo.codigo);
+      const pasaFiltro = mData
+        ? coincideFiltrosMunicipio(mData, departamentoFiltro, cuadranteFiltro)
+        : departamentoFiltro === null || mGeo.departamento === departamentoFiltro;
+      const atenuadoPorFiltro = hayFiltroActivo && !pasaFiltro;
+
+      if (modoEfectivo === "anio" && anioActivo !== null) {
+        const regAnio = obtenerRegistroAnual(mData, anioActivo);
+        if (!regAnio || regAnio.rendimiento_tha === null || regAnio.area_cosechada_ha <= 0) {
+          mapa.set(mGeo.codigo, {
+            rellenoSolido: colorNoElegible,
+            usaPatronBaja: false,
+            pasoIndice: -1,
+            esRobusto: false,
+            atenuadoPorFiltro,
+          });
+          continue;
+        }
+        const paso = escalaPasoAnual(regAnio.rendimiento_tha);
+        mapa.set(mGeo.codigo, {
+          rellenoSolido: paleta[paso] ?? paleta[0] ?? colorNoElegible,
+          usaPatronBaja: false,
+          pasoIndice: paso,
+          esRobusto: false,
+          atenuadoPorFiltro,
+        });
+        continue;
+      }
+
+      if (modoEfectivo === "dominante") {
         const dom = cultivosDominantes?.get(mGeo.codigo);
         mapa.set(mGeo.codigo, {
           rellenoSolido: dom ? COLORES_DOMINANTES[dom] : colorNoElegible,
           usaPatronBaja: false,
           pasoIndice: -1,
           esRobusto: false,
+          atenuadoPorFiltro,
         });
         continue;
       }
 
-      const mData = mapaMunicipiosDatos.get(mGeo.codigo);
-
-      if (modoVisual === "arroz_2021") {
+      if (modoEfectivo === "arroz_2021") {
         const { tasaPct } = obtenerTasaNoCosechada2021(mData);
         if (tasaPct === null) {
           mapa.set(mGeo.codigo, {
@@ -298,6 +400,7 @@ export function MapaCaribe({
             usaPatronBaja: false,
             pasoIndice: -1,
             esRobusto: false,
+            atenuadoPorFiltro,
           });
           continue;
         }
@@ -307,6 +410,7 @@ export function MapaCaribe({
           usaPatronBaja: false,
           pasoIndice: paso,
           esRobusto: false,
+          atenuadoPorFiltro,
         });
         continue;
       }
@@ -317,30 +421,37 @@ export function MapaCaribe({
           usaPatronBaja: false,
           pasoIndice: -1,
           esRobusto: false,
+          atenuadoPorFiltro,
         });
         continue;
       }
       const paso = escalaPasoBrecha(mData.brecha.brecha_relativa_pct);
       const color = paleta[paso] ?? paleta[0] ?? colorNoElegible;
       const esBaja =
-        modoVisual !== "cierre" &&
+        modoEfectivo !== "cierre" &&
         (mData.nivel_evidencia === "bajo" || nivelEvidenciaCultivo === "bajo");
       mapa.set(mGeo.codigo, {
         rellenoSolido: color,
         usaPatronBaja: esBaja,
         pasoIndice: paso,
         esRobusto: Boolean(mData.priorizacion.prioridad_robusta),
+        atenuadoPorFiltro,
       });
     }
     return mapa;
   }, [
     rutasMunicipios,
-    modoVisual,
+    modoEfectivo,
+    anioActivo,
+    escalaPasoAnual,
     cultivosDominantes,
     mapaMunicipiosDatos,
     colorNoElegible,
     paleta,
     nivelEvidenciaCultivo,
+    departamentoFiltro,
+    cuadranteFiltro,
+    hayFiltroActivo,
   ]);
 
   useEffect(() => {
@@ -356,7 +467,7 @@ export function MapaCaribe({
       typeof window !== "undefined" &&
       typeof window.matchMedia === "function" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const duracion = reduceMov ? 0 : 600;
+    const duracion = reduceMov ? 0 : 450;
 
     try {
       const sel = select(svgEl).selectAll<SVGPathElement, unknown>(".municipio-ruta");
@@ -375,17 +486,19 @@ export function MapaCaribe({
     } catch {
       // En entornos sin transicion SVG (p. ej. jsdom) React mantiene el atributo fill actualizado.
     }
-  }, [cultivoActivo, modoVisual, infoVisualPorCodigo, colorNoElegible]);
+  }, [cultivoActivo, modoEfectivo, anioActivo, infoVisualPorCodigo, colorNoElegible]);
 
   const detalleHover = municipioHover
     ? mapaMunicipiosDatos.get(municipioHover) ?? null
     : null;
   const domHover = municipioHover ? cultivosDominantes?.get(municipioHover) ?? null : null;
   const info2021Hover =
-    modoVisual === "arroz_2021" ? obtenerTasaNoCosechada2021(detalleHover ?? undefined) : null;
+    modoEfectivo === "arroz_2021" ? obtenerTasaNoCosechada2021(detalleHover ?? undefined) : null;
+  const infoAnioHover =
+    modoEfectivo === "anio" ? obtenerRegistroAnual(detalleHover ?? undefined, anioActivo) : null;
 
   return (
-    <div className="mapa-bloque" data-modo-mapa={modoVisual}>
+    <div className="mapa-bloque" data-modo-mapa={modoEfectivo}>
       <div className="mapa-contenedor" ref={contenedorRef}>
         <svg
           ref={svgRef}
@@ -426,7 +539,7 @@ export function MapaCaribe({
           <g
             className="mapa-camara"
             style={{ transform: transformCamara }}
-            data-zoom-activo={acercarACodigos.length > 0 ? "true" : "false"}
+            data-zoom-activo={codigosZoomEfectivos.length > 0 ? "true" : "false"}
           >
             <g className="capa-municipios">
               {rutasMunicipios.map((mGeo) => {
@@ -435,12 +548,15 @@ export function MapaCaribe({
                   info && info.usaPatronBaja && info.pasoIndice >= 0
                     ? `url(#patron-evidencia-baja-${info.pasoIndice})`
                     : (info?.rellenoSolido ?? colorNoElegible);
-                const estaResaltado = conjuntoResaltados.has(mGeo.codigo);
-                const esRobustoDestacado = modoVisual === "prioriza" && Boolean(info?.esRobusto);
+                const estaResaltado =
+                  modoEfectivo !== "anio" && conjuntoResaltados.has(mGeo.codigo);
+                const esRobustoDestacado =
+                  modoEfectivo === "prioriza" && Boolean(info?.esRobusto);
                 const clases = [
                   "municipio-ruta",
                   estaResaltado ? "municipio-pulso" : "",
                   esRobustoDestacado ? "municipio-robusto" : "",
+                  info?.atenuadoPorFiltro ? "municipio-atenuado" : "",
                 ]
                   .filter(Boolean)
                   .join(" ");
@@ -464,6 +580,7 @@ export function MapaCaribe({
                     data-departamento={mGeo.departamento}
                     data-seleccionado={municipioSeleccionado === mGeo.codigo ? "true" : "false"}
                     data-resaltado={estaResaltado ? "true" : "false"}
+                    data-atenuado={info?.atenuadoPorFiltro ? "true" : "false"}
                     tabIndex={0}
                     aria-label={etiqueta}
                     onMouseEnter={() => setMunicipioHover(mGeo.codigo)}
@@ -499,11 +616,20 @@ export function MapaCaribe({
           <div className="mapa-tooltip" role="status" aria-live="polite">
             <strong>{detalleHover.nombre}</strong> ({detalleHover.departamento})
             <br />
-            {modoVisual === "dominante" ? (
+            {modoEfectivo === "anio" && anioActivo !== null ? (
+              infoAnioHover && infoAnioHover.rendimiento_tha !== null ? (
+                <span className="cifra-tabular">
+                  {anioActivo}: {formatearDecimal(infoAnioHover.rendimiento_tha)} t/ha ·{" "}
+                  {formatearEntero(infoAnioHover.produccion_t)} t
+                </span>
+              ) : (
+                <span>Sin cosecha registrada en {anioActivo}</span>
+              )
+            ) : modoEfectivo === "dominante" ? (
               <span>
                 Cultivo dominante: <strong>{domHover ?? "Sin datos"}</strong>
               </span>
-            ) : modoVisual === "arroz_2021" && info2021Hover ? (
+            ) : modoEfectivo === "arroz_2021" && info2021Hover ? (
               info2021Hover.tasaPct !== null ? (
                 <span className="cifra-tabular">
                   Sin cosechar en 2021: {formatearPorcentaje(info2021Hover.tasaPct)} (
@@ -525,7 +651,35 @@ export function MapaCaribe({
       </div>
 
       <div className="mapa-leyenda" data-testid="mapa-leyenda" aria-label="Leyenda del mapa">
-        {modoVisual === "dominante" ? (
+        {modoEfectivo === "anio" && anioActivo !== null ? (
+          <>
+            <div className="leyenda-escala">
+              <span>
+                Rendimiento {anioActivo} ({cultivoActivo}):
+              </span>
+              <div className="leyenda-bloques">
+                {paleta.map((hex) => (
+                  <span
+                    key={hex}
+                    className="leyenda-bloque"
+                    style={{ backgroundColor: hex }}
+                  />
+                ))}
+              </div>
+              <span className="cifra-tabular">
+                {formatearDecimal(rangoRendimientoAnual.min, 1)} a{" "}
+                {formatearDecimal(rangoRendimientoAnual.max, 1)} t/ha
+              </span>
+            </div>
+            <div className="leyenda-escala">
+              <span
+                className="leyenda-bloque"
+                style={{ backgroundColor: colorNoElegible }}
+              />
+              <span>Sin registro en {anioActivo}</span>
+            </div>
+          </>
+        ) : modoEfectivo === "dominante" ? (
           <>
             <span className="leyenda-escala">
               <span
@@ -549,7 +703,7 @@ export function MapaCaribe({
               Arroz dominante
             </span>
           </>
-        ) : modoVisual === "arroz_2021" ? (
+        ) : modoEfectivo === "arroz_2021" ? (
           <>
             <div className="leyenda-escala">
               <span>Área no cosechada 2021 (Arroz):</span>
@@ -574,7 +728,7 @@ export function MapaCaribe({
           <>
             <div className="leyenda-escala">
               <span>
-                Brecha relativa ({modoVisual === "cierre" ? "Arroz" : cultivoActivo}):
+                Brecha relativa ({modoEfectivo === "cierre" ? "Arroz" : cultivoActivo}):
               </span>
               <div className="leyenda-bloques">
                 {paleta.map((hex, i) => (
@@ -597,7 +751,7 @@ export function MapaCaribe({
               <span>No elegible</span>
             </div>
 
-            {modoVisual === "cierre" ? (
+            {modoEfectivo === "cierre" ? (
               <div className="leyenda-escala">
                 <span className="leyenda-bloque leyenda-bloque-resaltado" />
                 <span>Guaranda y San Marcos</span>
@@ -621,37 +775,39 @@ export function MapaCaribe({
       </div>
 
       {datosCultivo ? (
-        <table className="sr-only" aria-label={`Datos municipales de ${cultivoActivo}`}>
-          <caption>
-            Brecha relativa de rendimiento y nivel de evidencia por municipio en {cultivoActivo}
-          </caption>
-          <thead>
-            <tr>
-              <th>Código DANE</th>
-              <th>Municipio</th>
-              <th>Departamento</th>
-              <th>Elegible</th>
-              <th>Brecha relativa (%)</th>
-              <th>Evidencia</th>
-            </tr>
-          </thead>
-          <tbody>
-            {datosCultivo.municipios.map((m) => (
-              <tr key={m.codigo}>
-                <td>{m.codigo}</td>
-                <td>{m.nombre}</td>
-                <td>{m.departamento}</td>
-                <td>{m.elegible ? "Sí" : "No"}</td>
-                <td>
-                  {m.brecha.brecha_relativa_pct !== null
-                    ? formatearPorcentaje(m.brecha.brecha_relativa_pct)
-                    : "No disponible"}
-                </td>
-                <td>{etiquetarEvidencia(m.nivel_evidencia)}</td>
+        <div className="sr-only">
+          <table className="sr-only" aria-label={`Datos municipales de ${cultivoActivo}`}>
+            <caption>
+              Brecha relativa de rendimiento y nivel de evidencia por municipio en {cultivoActivo}
+            </caption>
+            <thead>
+              <tr>
+                <th>Código DANE</th>
+                <th>Municipio</th>
+                <th>Departamento</th>
+                <th>Elegible</th>
+                <th>Brecha relativa (%)</th>
+                <th>Evidencia</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {datosCultivo.municipios.map((m) => (
+                <tr key={m.codigo}>
+                  <td>{m.codigo}</td>
+                  <td>{m.nombre}</td>
+                  <td>{m.departamento}</td>
+                  <td>{m.elegible ? "Sí" : "No"}</td>
+                  <td>
+                    {m.brecha.brecha_relativa_pct !== null
+                      ? formatearPorcentaje(m.brecha.brecha_relativa_pct)
+                      : "No disponible"}
+                  </td>
+                  <td>{etiquetarEvidencia(m.nivel_evidencia)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : null}
     </div>
   );

@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build && node scripts/verificarTamanoGzip.mjs",
@@ -12,6 +15,8 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "capturas": "node scripts/capturarVistas.mjs",
+    "gen:og": "node scripts/generarOg.mjs",
+    "verificar:dist": "node scripts/verificarDist.mjs",
     "gen:tipos": "node scripts/generarTipos.mjs"
   },
   "dependencies": {

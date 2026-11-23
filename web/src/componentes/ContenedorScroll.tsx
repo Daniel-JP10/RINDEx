@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import scrollama from "scrollama";
 import {
   cargarCalidad,
   cargarHallazgos,
@@ -17,9 +16,17 @@ import type { ContratoRegional } from "../tipos/generados/regional.ts";
 import type { ContratoSistemas } from "../tipos/generados/sistemas.ts";
 import {
   formatearDecimal,
+  formatearEntero,
   formatearMultiplicador,
   formatearPorcentaje,
 } from "../utilidades/formato.ts";
+import {
+  ANIOS_TABLERO,
+  CUADRANTES_FILTRO,
+  DEPARTAMENTOS_CARIBE,
+  calcularKpisTablero,
+  coincideFiltrosMunicipio,
+} from "../utilidades/tablero.ts";
 import { BuscadorMunicipio } from "./BuscadorMunicipio.tsx";
 import { FichaMunicipal } from "./FichaMunicipal.tsx";
 import { GraficoPesas } from "./GraficoPesas.tsx";
@@ -37,6 +44,7 @@ const CODIGOS_CIERRE_MOJANA: readonly string[] = ["70265", "70708"];
 interface PasoNarrativoRender {
   id: Exclude<IdSeccion, "portada">;
   capitulo: string;
+  etiquetaCorta: string;
   titulo: string;
   cifraHero?: {
     texto: string;
@@ -53,8 +61,16 @@ export function ContenedorScroll(): React.JSX.Element {
   const modo = usarTiendaRindex((s) => s.modo);
   const seccionActiva = usarTiendaRindex((s) => s.seccionActiva);
   const municipioSeleccionado = usarTiendaRindex((s) => s.municipioSeleccionado);
+  const departamentoFiltro = usarTiendaRindex((s) => s.departamentoFiltro);
+  const cuadranteFiltro = usarTiendaRindex((s) => s.cuadranteFiltro);
+  const anioActivo = usarTiendaRindex((s) => s.anioActivo);
+
   const establecerCultivo = usarTiendaRindex((s) => s.establecerCultivo);
   const establecerSeccionActiva = usarTiendaRindex((s) => s.establecerSeccionActiva);
+  const establecerDepartamentoFiltro = usarTiendaRindex((s) => s.establecerDepartamentoFiltro);
+  const establecerCuadranteFiltro = usarTiendaRindex((s) => s.establecerCuadranteFiltro);
+  const establecerAnioActivo = usarTiendaRindex((s) => s.establecerAnioActivo);
+  const limpiarFiltros = usarTiendaRindex((s) => s.limpiarFiltros);
 
   const [topoJson, setTopoJson] = useState<ContratoTopoJsonCaribe | null>(null);
   const [datosCultivo, setDatosCultivo] = useState<ContratoMunicipiosCultivo | null>(null);
@@ -65,8 +81,9 @@ export function ContenedorScroll(): React.JSX.Element {
   const [errorDatos, setErrorDatos] = useState<string | null>(null);
   const [ultimoRenderMs, setUltimoRenderMs] = useState<number | null>(null);
 
-  const listaPasosRef = useRef<HTMLDivElement | null>(null);
+  const rielPasosRef = useRef<HTMLDivElement | null>(null);
   const seccionPreviaRef = useRef<IdSeccion>(seccionActiva);
+  const bloquearObserverHastaRef = useRef<number>(0);
 
   useEffect(() => {
     let cancelado = false;
@@ -131,39 +148,54 @@ export function ContenedorScroll(): React.JSX.Element {
       (seccionActiva === "el_golpe" || seccionActiva === "conexion_la_mojana")
     ) {
       establecerCultivo("Arroz");
+      establecerAnioActivo(null);
+      establecerDepartamentoFiltro(null);
     }
-  }, [seccionActiva, establecerCultivo]);
+  }, [seccionActiva, establecerCultivo, establecerAnioActivo, establecerDepartamentoFiltro]);
 
+  /* Sincroniza el paso activo al desplazar el riel interno en escritorio */
   useEffect(() => {
-    const elCont = listaPasosRef.current;
-    if (!elCont) {
+    const riel = rielPasosRef.current;
+    if (!riel || typeof IntersectionObserver === "undefined") {
       return undefined;
     }
-    try {
-      const scroller = scrollama();
-      scroller
-        .setup({
-          step: ".paso-narrativo",
-          offset: 0.5,
-        })
-        .onStepEnter((resp) => {
-          const id = resp.element.getAttribute("data-seccion") as IdSeccion | null;
+
+    const pasos = Array.from(riel.querySelectorAll<HTMLElement>(".paso-narrativo"));
+    if (pasos.length === 0) {
+      return undefined;
+    }
+
+    const observador = new IntersectionObserver(
+      (entradas) => {
+        if (window.innerWidth <= 960 || Date.now() < bloquearObserverHastaRef.current) {
+          return;
+        }
+        let mejor: IntersectionObserverEntry | null = null;
+        for (const ent of entradas) {
+          if (ent.isIntersecting) {
+            if (!mejor || ent.intersectionRatio > mejor.intersectionRatio) {
+              mejor = ent;
+            }
+          }
+        }
+        if (mejor) {
+          const id = mejor.target.getAttribute("data-seccion") as IdSeccion | null;
           if (id) {
             establecerSeccionActiva(id);
           }
-        });
+        }
+      },
+      {
+        root: riel,
+        rootMargin: "-15% 0px -45% 0px",
+        threshold: [0.25, 0.55, 0.85],
+      },
+    );
 
-      const manejarResize = (): void => {
-        scroller.resize();
-      };
-      window.addEventListener("resize", manejarResize);
-      return () => {
-        window.removeEventListener("resize", manejarResize);
-        scroller.destroy();
-      };
-    } catch {
-      return undefined;
+    for (const paso of pasos) {
+      observador.observe(paso);
     }
+    return () => observador.disconnect();
   }, [establecerSeccionActiva]);
 
   const metricasNarrativa = useMemo(() => {
@@ -223,6 +255,7 @@ export function ContenedorScroll(): React.JSX.Element {
       {
         id: "panorama",
         capitulo: "Panorama regional",
+        etiquetaCorta: "Panorama",
         titulo: "Tres cultivos sostienen la mesa del Caribe",
         cifraHero: {
           texto: formatearPorcentaje(m.pctToneladasYuca),
@@ -241,6 +274,7 @@ export function ContenedorScroll(): React.JSX.Element {
       {
         id: "el_golpe",
         capitulo: "Arroz en 2021",
+        etiquetaCorta: "Arroz 2021",
         titulo: "2021, el año en que el arroz se quedó en el campo",
         cifraHero: {
           texto: formatearPorcentaje(m.tasaRegional2021),
@@ -259,6 +293,7 @@ export function ContenedorScroll(): React.JSX.Element {
       {
         id: "mapa_brecha",
         capitulo: "Brecha de rendimiento",
+        etiquetaCorta: "Brecha",
         titulo: "Con la misma tierra, no todos cosechan igual",
         lineasDecisor: [
           "Cada municipio se compara con los mejores de su propio departamento.",
@@ -272,6 +307,7 @@ export function ContenedorScroll(): React.JSX.Element {
       {
         id: "por_que_rinde_menos",
         capitulo: "Sistemas productivos",
+        etiquetaCorta: "Sistemas ×",
         titulo: "La diferencia cabe en una letra: ×",
         cifraHero: {
           texto: formatearMultiplicador(m.h2Maiz),
@@ -290,6 +326,7 @@ export function ContenedorScroll(): React.JSX.Element {
       {
         id: "lo_que_no_sabemos",
         capitulo: "Calidad del registro",
+        etiquetaCorta: "Calidad",
         titulo: "Lo que los datos no alcanzan a decir",
         cifraHero: {
           texto: `${deCadaDiezYuca} de cada 10`,
@@ -308,6 +345,7 @@ export function ContenedorScroll(): React.JSX.Element {
       {
         id: "matriz",
         capitulo: "Matriz de decisión",
+        etiquetaCorta: "Matriz",
         titulo: "Cuatro municipios, cuatro decisiones",
         lineasDecisor: [
           "Consolidar: rinde bien y de forma estable.",
@@ -322,6 +360,7 @@ export function ContenedorScroll(): React.JSX.Element {
       {
         id: "simula",
         capitulo: "Simulación de escenarios",
+        etiquetaCorta: "Escenarios",
         titulo: "Mueve las palancas",
         lineasDecisor: [
           "Cierra la brecha, tecnifica o recupera lo que no se cosecha.",
@@ -334,6 +373,7 @@ export function ContenedorScroll(): React.JSX.Element {
       {
         id: "prioriza",
         capitulo: "Priorización robusta",
+        etiquetaCorta: "Prioridad",
         titulo: "Por dónde empezar",
         cifraHero: {
           texto: "2.000",
@@ -350,6 +390,7 @@ export function ContenedorScroll(): React.JSX.Element {
       {
         id: "conexion_la_mojana",
         capitulo: "Cierre territorial",
+        etiquetaCorta: "La Mojana",
         titulo: "Donde se perdió la cosecha, está la oportunidad",
         lineasDecisor: [
           "Guaranda y San Marcos fueron de los más golpeados en 2021, y hoy están en el núcleo de prioridad del arroz.",
@@ -361,6 +402,7 @@ export function ContenedorScroll(): React.JSX.Element {
       {
         id: "metodologia",
         capitulo: "Metodología y auditoría",
+        etiquetaCorta: "Metodología",
         titulo: "Cómo se calculan y auditan las cifras",
         lineasDecisor: [
           "Cada número proviene de datos abiertos oficiales de producción agrícola, cartografía oficial y series climáticas públicas.",
@@ -405,16 +447,30 @@ export function ContenedorScroll(): React.JSX.Element {
     return mapa;
   }, [sistemas]);
 
+  const kpisTablero = useMemo(() => {
+    if (!datosCultivo) {
+      return null;
+    }
+    return calcularKpisTablero(
+      datosCultivo.municipios,
+      departamentoFiltro,
+      cuadranteFiltro,
+      anioActivo,
+    );
+  }, [datosCultivo, departamentoFiltro, cuadranteFiltro, anioActivo]);
+
   const opcionesBuscador = useMemo(() => {
     if (!datosCultivo) {
       return [];
     }
-    return datosCultivo.municipios.map((m) => ({
-      codigo: m.codigo,
-      nombre: m.nombre,
-      departamento: m.departamento,
-    }));
-  }, [datosCultivo]);
+    return datosCultivo.municipios
+      .filter((m) => coincideFiltrosMunicipio(m, departamentoFiltro, cuadranteFiltro))
+      .map((m) => ({
+        codigo: m.codigo,
+        nombre: m.nombre,
+        departamento: m.departamento,
+      }));
+  }, [datosCultivo, departamentoFiltro, cuadranteFiltro]);
 
   const totalElegibles = useMemo(() => {
     if (!datosCultivo) {
@@ -433,6 +489,15 @@ export function ContenedorScroll(): React.JSX.Element {
   const seccionVisual: Exclude<IdSeccion, "portada"> =
     seccionActiva === "portada" ? "panorama" : seccionActiva;
 
+  const nombreDeptoActivo = useMemo(() => {
+    if (!departamentoFiltro) {
+      return "Caribe";
+    }
+    return (
+      DEPARTAMENTOS_CARIBE.find((d) => d.codigo === departamentoFiltro)?.nombre ?? "Caribe"
+    );
+  }, [departamentoFiltro]);
+
   const estadoPanel = useMemo<{
     mostrarPesas: boolean;
     modoMapa: ModoMapaCaribe;
@@ -441,6 +506,17 @@ export function ContenedorScroll(): React.JSX.Element {
     codigosResaltados: readonly string[];
     acercarACodigos: readonly string[];
   }>(() => {
+    if (anioActivo !== null && seccionVisual !== "por_que_rinde_menos") {
+      return {
+        mostrarPesas: false,
+        modoMapa: "anio",
+        titulo: `Rendimiento en ${anioActivo} — ${cultivoActivo}`,
+        subtitulo: `Distribución municipal en ${nombreDeptoActivo} para el año ${anioActivo}`,
+        codigosResaltados: [],
+        acercarACodigos: [],
+      };
+    }
+
     switch (seccionVisual) {
       case "panorama":
         return {
@@ -456,7 +532,8 @@ export function ContenedorScroll(): React.JSX.Element {
           mostrarPesas: false,
           modoMapa: "arroz_2021",
           titulo: "Arroz sin cosechar en 2021 — La Mojana",
-          subtitulo: "Tasa municipal de área no cosechada y foco en los cinco municipios principales",
+          subtitulo:
+            "Tasa municipal de área no cosechada y foco en los cinco municipios principales",
           codigosResaltados: CODIGOS_MOJANA_TOP5,
           acercarACodigos: CODIGOS_MOJANA_TOP5,
         };
@@ -501,7 +578,8 @@ export function ContenedorScroll(): React.JSX.Element {
           mostrarPesas: false,
           modoMapa: "prioriza",
           titulo: `Prioridad municipal — ${cultivoActivo}`,
-          subtitulo: "Núcleo robusto que se mantiene en los primeros puestos bajo 2.000 ponderaciones",
+          subtitulo:
+            "Núcleo robusto que se mantiene en los primeros puestos bajo 2.000 ponderaciones",
           codigosResaltados: [],
           acercarACodigos: [],
         };
@@ -510,7 +588,8 @@ export function ContenedorScroll(): React.JSX.Element {
           mostrarPesas: false,
           modoMapa: "cierre",
           titulo: "Cruce en La Mojana — Arroz",
-          subtitulo: "Guaranda y San Marcos coinciden entre el golpe de 2021 y la prioridad estructural",
+          subtitulo:
+            "Guaranda y San Marcos coinciden entre el golpe de 2021 y la prioridad estructural",
           codigosResaltados: CODIGOS_CIERRE_MOJANA,
           acercarACodigos: CODIGOS_MOJANA_TOP5,
         };
@@ -534,122 +613,298 @@ export function ContenedorScroll(): React.JSX.Element {
           acercarACodigos: [],
         };
     }
-  }, [seccionVisual, cultivoActivo]);
+  }, [seccionVisual, cultivoActivo, anioActivo, nombreDeptoActivo]);
+
+  const hayFiltros =
+    departamentoFiltro !== null || cuadranteFiltro !== null || anioActivo !== null;
+
+  const activarCapitulo = (id: Exclude<IdSeccion, "portada">): void => {
+    bloquearObserverHastaRef.current = Date.now() + 800;
+    establecerSeccionActiva(id);
+    const destino = document.getElementById(id);
+    if (destino && rielPasosRef.current && window.innerWidth > 960) {
+      const riel = rielPasosRef.current;
+      riel.scrollTo({
+        top: Math.max(0, destino.offsetTop - riel.offsetTop - 12),
+        behavior: "smooth",
+      });
+    }
+  };
 
   return (
-    <main id="narrativa-caribe" className="scroll-contenedor">
-      <div className="columna-pasos" ref={listaPasosRef}>
-        {pasosNarrativos.map((paso) => {
-          const activo = seccionVisual === paso.id;
-          return (
-            <article
-              key={paso.id}
-              id={paso.id}
-              data-seccion={paso.id}
-              data-activo={activo ? "true" : "false"}
-              className="paso-narrativo"
-              onClick={() => establecerSeccionActiva(paso.id)}
+    <main id="narrativa-caribe" className="tablero-seccion">
+      <div className="tablero-marco" data-testid="tablero-marco">
+        {/* Barra superior estilo tablero BI: filtros y linea de tiempo */}
+        <div className="tablero-barra-superior" aria-label="Controles del tablero territorial">
+          <div className="tablero-filtros-fila">
+            <label className="tablero-filtro-grupo">
+              <span className="tablero-filtro-etiqueta">Departamento</span>
+              <select
+                className="tablero-select"
+                aria-label="Filtrar por departamento"
+                data-testid="filtro-departamento"
+                value={departamentoFiltro ?? ""}
+                onChange={(e) =>
+                  establecerDepartamentoFiltro(e.target.value === "" ? null : e.target.value)
+                }
+              >
+                <option value="">Todos (7 deptos.)</option>
+                {DEPARTAMENTOS_CARIBE.map((d) => (
+                  <option key={d.codigo} value={d.codigo}>
+                    {d.nombre}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="tablero-filtro-grupo">
+              <span className="tablero-filtro-etiqueta">Cuadrante</span>
+              <select
+                className="tablero-select"
+                aria-label="Filtrar por cuadrante de decisión"
+                data-testid="filtro-cuadrante"
+                value={cuadranteFiltro ?? ""}
+                onChange={(e) =>
+                  establecerCuadranteFiltro(e.target.value === "" ? null : e.target.value)
+                }
+              >
+                <option value="">Todos los cuadrantes</option>
+                {CUADRANTES_FILTRO.map((c) => (
+                  <option key={c.clave} value={c.clave}>
+                    {c.etiqueta}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div
+              className="tablero-linea-tiempo"
+              role="group"
+              aria-label="Línea de tiempo anual 2019 a 2025"
+              data-testid="linea-tiempo"
             >
-              <span className="paso-capitulo">{paso.capitulo}</span>
-              <h2 className="paso-titulo">{paso.titulo}</h2>
-
-              {paso.cifraHero ? (
-                <div className="paso-cifra-bloque">
-                  <span
-                    className={`paso-cifra-grande paso-cifra-${paso.cifraHero.tono} cifra-tabular`}
+              <span className="tablero-filtro-etiqueta">Línea de tiempo</span>
+              <div className="linea-tiempo-botones">
+                <button
+                  type="button"
+                  className="boton-anio"
+                  aria-pressed={anioActivo === null}
+                  onClick={() => establecerAnioActivo(null)}
+                >
+                  2019–2025
+                </button>
+                {ANIOS_TABLERO.map((anio) => (
+                  <button
+                    key={anio}
+                    type="button"
+                    className="boton-anio cifra-tabular"
+                    aria-pressed={anioActivo === anio}
+                    onClick={() => establecerAnioActivo(anio)}
                   >
-                    {paso.cifraHero.texto}
-                  </span>
-                  {paso.cifraHero.etiqueta ? (
-                    <span className="paso-cifra-etiqueta">{paso.cifraHero.etiqueta}</span>
-                  ) : null}
-                </div>
-              ) : null}
+                    {anio}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-              {modo === "decisor" ? (
-                <div className="paso-cuerpo">
-                  {paso.lineasDecisor.map((linea, idx) => (
-                    <p key={idx} className="paso-texto">
-                      {linea}
-                    </p>
-                  ))}
-                </div>
-              ) : (
-                <p className="paso-texto">
-                  {paso.textoTecnico}{" "}
-                  {paso.mostrarEnlaceMetodologia ? (
-                    <a href="#metodologia" className="enlace-metodologia">
-                      Ver metodología
-                    </a>
-                  ) : null}
-                </p>
-              )}
-            </article>
-          );
-        })}
-      </div>
-
-      <section
-        className="panel-fijo"
-        data-testid="panel-fijo"
-        data-seccion-panel={seccionVisual}
-        aria-label="Panel visual activo"
-      >
-        <div className="barra-herramientas-mapa">
-          <div className="panel-encabezado-texto">
-            <h2 className="panel-titulo">{estadoPanel.titulo}</h2>
-            <span className="panel-subtitulo" data-testid="panel-subtitulo">
-              {estadoPanel.subtitulo}
-            </span>
+            {hayFiltros ? (
+              <button
+                type="button"
+                className="boton-limpiar-filtros"
+                onClick={limpiarFiltros}
+              >
+                Limpiar filtros
+              </button>
+            ) : null}
           </div>
-          {!estadoPanel.mostrarPesas ? (
-            <BuscadorMunicipio municipios={opcionesBuscador} />
+
+          {kpisTablero ? (
+            <div className="tablero-kpis" data-testid="tablero-kpis">
+              <div className="kpi-tarjeta">
+                <span className="kpi-etiqueta">
+                  Producción · {cultivoActivo} ({anioActivo ?? "2019–2025"})
+                </span>
+                <strong className="kpi-valor cifra-tabular" data-testid="kpi-produccion">
+                  {formatearEntero(kpisTablero.produccionTotalT)} t
+                </strong>
+              </div>
+              <div className="kpi-tarjeta">
+                <span className="kpi-etiqueta">Área cosechada · {nombreDeptoActivo}</span>
+                <strong className="kpi-valor cifra-tabular" data-testid="kpi-area">
+                  {formatearEntero(kpisTablero.areaCosechadaTotalHa)} ha
+                </strong>
+              </div>
+              <div className="kpi-tarjeta">
+                <span className="kpi-etiqueta">Rendimiento ponderado</span>
+                <strong className="kpi-valor cifra-tabular" data-testid="kpi-rendimiento">
+                  {kpisTablero.rendimientoPonderadoTha !== null
+                    ? `${formatearDecimal(kpisTablero.rendimientoPonderadoTha)} t/ha`
+                    : "Sin dato"}
+                </strong>
+              </div>
+              <div className="kpi-tarjeta">
+                <span className="kpi-etiqueta">
+                  {anioActivo !== null
+                    ? `Municipios con cosecha (${anioActivo})`
+                    : "Municipios elegibles"}
+                </span>
+                <strong className="kpi-valor cifra-tabular" data-testid="kpi-municipios">
+                  {anioActivo !== null
+                    ? formatearEntero(kpisTablero.municipiosConDato)
+                    : `${formatearEntero(kpisTablero.municipiosElegibles)} de ${formatearEntero(
+                        kpisTablero.municipiosConDato,
+                      )}`}
+                </strong>
+              </div>
+            </div>
           ) : null}
         </div>
 
-        {errorDatos ? (
-          <div className="estado-error" role="alert">
-            {errorDatos}
-          </div>
-        ) : null}
+        {/* Navegacion rapida por capitulos */}
+        <nav className="tablero-capitulos-nav" aria-label="Capítulos de la historia">
+          {pasosNarrativos.map((paso) => (
+            <button
+              key={`nav-${paso.id}`}
+              type="button"
+              className="boton-capitulo"
+              aria-current={seccionVisual === paso.id ? "step" : undefined}
+              onClick={() => activarCapitulo(paso.id)}
+            >
+              {paso.etiquetaCorta}
+            </button>
+          ))}
+        </nav>
 
-        {estadoPanel.mostrarPesas ? (
-          <GraficoPesas sistemas={sistemas} hallazgos={hallazgos} />
-        ) : (
-          <div
-            className={
-              fichaActiva ? "area-mapa-y-ficha area-con-ficha" : "area-mapa-y-ficha"
-            }
+        {/* Cuerpo del tablero en dos paneles encerrados en el rectangulo */}
+        <div className="tablero-cuerpo">
+          <div className="columna-pasos tablero-narrativa" ref={rielPasosRef}>
+            {pasosNarrativos.map((paso) => {
+              const activo = seccionVisual === paso.id;
+              return (
+                <article
+                  key={paso.id}
+                  id={paso.id}
+                  data-seccion={paso.id}
+                  data-activo={activo ? "true" : "false"}
+                  className="paso-narrativo"
+                  onClick={() => activarCapitulo(paso.id)}
+                >
+                  <span className="paso-capitulo">{paso.capitulo}</span>
+                  <h2 className="paso-titulo">{paso.titulo}</h2>
+
+                  {paso.cifraHero ? (
+                    <div className="paso-cifra-bloque">
+                      <span
+                        className={`paso-cifra-grande paso-cifra-${paso.cifraHero.tono} cifra-tabular`}
+                      >
+                        {paso.cifraHero.texto}
+                      </span>
+                      {paso.cifraHero.etiqueta ? (
+                        <span className="paso-cifra-etiqueta">{paso.cifraHero.etiqueta}</span>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {modo === "decisor" ? (
+                    <div className="paso-cuerpo">
+                      {paso.lineasDecisor.map((linea, idx) => (
+                        <p key={idx} className="paso-texto">
+                          {linea}
+                        </p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="paso-texto">
+                      {paso.textoTecnico}{" "}
+                      {paso.mostrarEnlaceMetodologia ? (
+                        <a
+                          href="#metodologia"
+                          className="enlace-metodologia"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            activarCapitulo("metodologia");
+                          }}
+                        >
+                          Ver metodología
+                        </a>
+                      ) : null}
+                    </p>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+
+          <section
+            className="panel-fijo tablero-visual"
+            data-testid="panel-fijo"
+            data-seccion-panel={seccionVisual}
+            aria-label="Panel visual activo"
           >
-            {topoJson ? (
-              <MapaCaribe
-                topoJson={topoJson}
-                datosCultivo={datosCultivo}
-                modoVisual={estadoPanel.modoMapa}
-                cultivosDominantes={cultivosDominantes}
-                codigosResaltados={estadoPanel.codigosResaltados}
-                acercarACodigos={estadoPanel.acercarACodigos}
-                alMedirRender={setUltimoRenderMs}
-              />
+            <div className="barra-herramientas-mapa">
+              <div className="panel-encabezado-texto">
+                <h2 className="panel-titulo">{estadoPanel.titulo}</h2>
+                <span className="panel-subtitulo" data-testid="panel-subtitulo">
+                  {estadoPanel.subtitulo}
+                </span>
+              </div>
+              {!estadoPanel.mostrarPesas ? (
+                <BuscadorMunicipio municipios={opcionesBuscador} />
+              ) : null}
+            </div>
+
+            {errorDatos ? (
+              <div className="estado-error" role="alert">
+                {errorDatos}
+              </div>
+            ) : null}
+
+            {estadoPanel.mostrarPesas ? (
+              <GraficoPesas sistemas={sistemas} hallazgos={hallazgos} />
             ) : (
-              <div className="mapa-contenedor">
-                <p className="texto-secundario" style={{ padding: "16px" }}>
-                  Cargando cartografía del Caribe...
-                </p>
+              <div
+                className={
+                  fichaActiva ? "area-mapa-y-ficha area-con-ficha" : "area-mapa-y-ficha"
+                }
+              >
+                {topoJson ? (
+                  <MapaCaribe
+                    topoJson={topoJson}
+                    datosCultivo={datosCultivo}
+                    modoVisual={estadoPanel.modoMapa}
+                    cultivosDominantes={cultivosDominantes}
+                    codigosResaltados={estadoPanel.codigosResaltados}
+                    acercarACodigos={estadoPanel.acercarACodigos}
+                    departamentoFiltro={departamentoFiltro}
+                    cuadranteFiltro={cuadranteFiltro}
+                    anioActivo={anioActivo}
+                    alMedirRender={setUltimoRenderMs}
+                  />
+                ) : (
+                  <div className="mapa-contenedor">
+                    <p className="texto-secundario" style={{ padding: "16px" }}>
+                      Cargando cartografía del Caribe...
+                    </p>
+                  </div>
+                )}
+
+                <FichaMunicipal
+                  municipio={fichaActiva}
+                  totalElegibles={totalElegibles}
+                  anioActivo={anioActivo}
+                />
               </div>
             )}
 
-            <FichaMunicipal municipio={fichaActiva} totalElegibles={totalElegibles} />
-          </div>
-        )}
-
-        {modo === "tecnico" && !estadoPanel.mostrarPesas && ultimoRenderMs !== null ? (
-          <div className="panel-nota-rendimiento cifra-tabular">
-            Proyección vectorial de 195 municipios y 7 departamentos en{" "}
-            {ultimoRenderMs.toFixed(1)} ms.
-          </div>
-        ) : null}
-      </section>
+            {modo === "tecnico" && !estadoPanel.mostrarPesas && ultimoRenderMs !== null ? (
+              <div className="panel-nota-rendimiento cifra-tabular">
+                Proyección vectorial de 195 municipios y 7 departamentos en{" "}
+                {ultimoRenderMs.toFixed(1)} ms.
+              </div>
+            ) : null}
+          </section>
+        </div>
+      </div>
     </main>
   );
 }

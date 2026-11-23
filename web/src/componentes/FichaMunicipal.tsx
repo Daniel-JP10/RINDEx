@@ -11,12 +11,14 @@ import {
 interface PropsFichaMunicipal {
   municipio: MunicipioCultivoItem | null;
   totalElegibles?: number;
+  anioActivo?: number | null;
   alCerrar?: () => void;
 }
 
 export function FichaMunicipal({
   municipio,
   totalElegibles,
+  anioActivo = null,
   alCerrar,
 }: PropsFichaMunicipal): React.JSX.Element {
   const cultivoActivo = usarTiendaRindex((s) => s.cultivoActivo);
@@ -43,6 +45,9 @@ export function FichaMunicipal({
   const puntosSerie = municipio.serie_anual
     .filter((s) => s.rendimiento_tha !== null)
     .sort((a, b) => a.anio - b.anio);
+
+  const registroAnioActivo =
+    anioActivo !== null ? puntosSerie.find((p) => p.anio === anioActivo) ?? null : null;
 
   const anchoSvg = 240;
   const altoSvg = 68;
@@ -96,6 +101,9 @@ export function FichaMunicipal({
           "Z",
         ].join(" ")
       : "";
+
+  const idxAnioActivo =
+    anioActivo !== null ? puntosSerie.findIndex((p) => p.anio === anioActivo) : -1;
 
   const textoPrioridad =
     municipio.priorizacion.rango !== null
@@ -176,7 +184,28 @@ export function FichaMunicipal({
                 stroke="var(--color-tinta)"
                 strokeWidth="2"
               />
+              {idxAnioActivo >= 0 && puntosSerie[idxAnioActivo] ? (
+                <circle
+                  cx={coordX(idxAnioActivo)}
+                  cy={coordY(puntosSerie[idxAnioActivo]!.rendimiento_tha ?? 0)}
+                  r={4.5}
+                  fill="var(--color-acento)"
+                  stroke="var(--color-superficie-elevada)"
+                  strokeWidth="1.5"
+                />
+              ) : null}
             </svg>
+          ) : null}
+
+          {anioActivo !== null ? (
+            <div className="ficha-fila-meta">
+              <span>Rendimiento en {anioActivo}</span>
+              <strong className="cifra-tabular">
+                {registroAnioActivo && registroAnioActivo.rendimiento_tha !== null
+                  ? `${formatearDecimal(registroAnioActivo.rendimiento_tha)} t/ha`
+                  : "Sin dato"}
+              </strong>
+            </div>
           ) : null}
 
           <div className="ficha-fila-meta">

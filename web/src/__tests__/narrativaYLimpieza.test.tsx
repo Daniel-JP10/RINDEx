@@ -22,7 +22,7 @@ function afirmarTextoLimpio(texto: string, contexto: string): void {
   expect(texto, `${contexto}: contiene construccion`).not.toMatch(/construcci[oó]n/i);
 }
 
-describe("Regla absoluta de limpieza narrativa y sincronia scroll-mapa", () => {
+describe("Regla absoluta de limpieza narrativa, filtros y sincronia scroll-mapa", () => {
   beforeEach(() => {
     limpiarCacheDatos();
     usarTiendaRindex.getState().reiniciar();
@@ -58,18 +58,21 @@ describe("Regla absoluta de limpieza narrativa y sincronia scroll-mapa", () => {
       expect(screen.getByTestId("frase-gancho-portada").textContent).toContain("681.536");
     });
 
-    /* Seleccionar un municipio para verificar tambien FichaMunicipal abierta */
+    /* Seleccionar un municipio, filtrar por departamento y activar un anio de la linea de tiempo */
     act(() => {
       usarTiendaRindex.getState().seleccionarMunicipio("23189");
+      usarTiendaRindex.getState().establecerDepartamentoFiltro("23");
+      usarTiendaRindex.getState().establecerAnioActivo(2021);
     });
     await waitFor(() => {
       expect(screen.getByTestId("ficha-municipal").textContent).toContain("Ciénaga de Oro");
     });
 
-    afirmarTextoLimpio(container.textContent ?? "", "Modo Decisor con mapa y ficha");
+    afirmarTextoLimpio(container.textContent ?? "", "Modo Decisor con filtros, linea de tiempo y ficha");
 
     /* Entrar al paso de sistemas productivos para verificar GraficoPesas en Decisor */
     act(() => {
+      usarTiendaRindex.getState().limpiarFiltros();
       usarTiendaRindex.getState().establecerSeccionActiva("por_que_rinde_menos");
     });
     await waitFor(() => {

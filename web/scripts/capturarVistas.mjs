@@ -47,40 +47,50 @@ async function ejecutar() {
           archivosGenerados.push(path.relative(path.resolve(process.cwd(), ".."), destino));
         };
 
+        const enfocarTablero = async () => {
+          await page.evaluate(() => {
+            const marco = document.querySelector('[data-testid="tablero-marco"]');
+            if (marco) {
+              const top = marco.getBoundingClientRect().top + window.scrollY - 76;
+              window.scrollTo({ top: Math.max(0, top), behavior: "instant" });
+            }
+          });
+        };
+
         /* 1. Portada */
-        await page.evaluate(() => window.scrollTo(0, 0));
-        await page.waitForTimeout(250);
+        await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+        await page.waitForTimeout(200);
         await guardar("portada");
 
-        /* 2. Panorama */
-        await page.locator("#panorama").scrollIntoViewIfNeeded();
+        /* 2. Panorama en tablero BI */
         await page.locator("#panorama").click();
+        await enfocarTablero();
         await page.waitForTimeout(450);
         await guardar("panorama");
 
         /* 3. El golpe con acercamiento a La Mojana */
-        await page.locator("#el_golpe").scrollIntoViewIfNeeded();
         await page.locator("#el_golpe").click();
-        await page.waitForTimeout(900);
+        await enfocarTablero();
+        await page.waitForTimeout(850);
         await guardar("el_golpe");
 
         /* 4. Mapa de brecha con ficha municipal abierta */
-        await page.locator("#mapa_brecha").scrollIntoViewIfNeeded();
         await page.locator("#mapa_brecha").click();
-        await page.waitForTimeout(600);
+        await enfocarTablero();
+        await page.waitForTimeout(500);
         const entrada = page.getByRole("combobox", { name: /Buscar municipio/i });
         await entrada.click();
         await entrada.fill("Ciénaga de Oro");
         await entrada.press("Enter");
         await page.waitForSelector('[data-testid="ficha-municipal"]');
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(450);
         await guardar("mapa_brecha_ficha");
 
         /* 5. Pie de pagina */
         await page.evaluate(() => {
-          window.scrollTo(0, document.documentElement.scrollHeight);
+          window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" });
         });
-        await page.waitForTimeout(400);
+        await page.waitForTimeout(250);
         await guardar("pie_pagina");
 
         await contexto.close();
@@ -100,9 +110,7 @@ async function ejecutar() {
 }
 
 ejecutar()
-  .then(() => {
-    process.exit(0);
-  })
+  .then(() => process.exit(0))
   .catch((err) => {
     console.error(err);
     process.exit(1);
