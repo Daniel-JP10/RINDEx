@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../App.tsx";
 import { limpiarCacheDatos } from "../datos/cargador.ts";
-import { usarTiendaRindex } from "../estado/tiendaRindex.ts";
+import { usarTiendaRindex, type IdSeccion } from "../estado/tiendaRindex.ts";
 
 const dirDatosPublic = path.resolve(process.cwd(), "public", "data");
 
@@ -22,7 +22,16 @@ function afirmarTextoLimpio(texto: string, contexto: string): void {
   expect(texto, `${contexto}: contiene construccion`).not.toMatch(/construcci[oó]n/i);
 }
 
-describe("Regla absoluta de limpieza narrativa, filtros y sincronia scroll-mapa", () => {
+const VISTAS_ANALITICAS: ReadonlyArray<{ seccion: IdSeccion; testId: string }> = [
+  { seccion: "por_que_rinde_menos", testId: "grafico-pesas" },
+  { seccion: "lo_que_no_sabemos", testId: "panel-calidad" },
+  { seccion: "matriz", testId: "grafico-matriz" },
+  { seccion: "simula", testId: "simulador-escenarios" },
+  { seccion: "prioriza", testId: "tabla-prioridad" },
+  { seccion: "metodologia", testId: "panel-metodologia" },
+];
+
+describe("Regla absoluta de limpieza narrativa, vistas analiticas y sincronia", () => {
   beforeEach(() => {
     limpiarCacheDatos();
     usarTiendaRindex.getState().reiniciar();
@@ -51,14 +60,14 @@ describe("Regla absoluta de limpieza narrativa, filtros y sincronia scroll-mapa"
     limpiarCacheDatos();
   });
 
-  it("no expone artefactos internos, codigos D1-D10, guiones bajos ni construccion en Decisor ni Tecnico", async () => {
+  it("no expone artefactos internos, codigos D1-D10, guiones bajos ni construccion en ninguna vista ni modo", async () => {
     const { container } = render(<App />);
 
     await waitFor(() => {
       expect(screen.getByTestId("frase-gancho-portada").textContent).toContain("681.536");
     });
 
-    /* Seleccionar un municipio, filtrar por departamento y activar un anio de la linea de tiempo */
+    /* Verificar mapa con filtros, linea de tiempo y ficha abierta */
     act(() => {
       usarTiendaRindex.getState().seleccionarMunicipio("23189");
       usarTiendaRindex.getState().establecerDepartamentoFiltro("23");
@@ -67,59 +76,69 @@ describe("Regla absoluta de limpieza narrativa, filtros y sincronia scroll-mapa"
     await waitFor(() => {
       expect(screen.getByTestId("ficha-municipal").textContent).toContain("Ciénaga de Oro");
     });
+    afirmarTextoLimpio(container.textContent ?? "", "Decisor mapa + filtros + ficha");
 
-    afirmarTextoLimpio(container.textContent ?? "", "Modo Decisor con filtros, linea de tiempo y ficha");
-
-    /* Entrar al paso de sistemas productivos para verificar GraficoPesas en Decisor */
     act(() => {
       usarTiendaRindex.getState().limpiarFiltros();
-      usarTiendaRindex.getState().establecerSeccionActiva("por_que_rinde_menos");
     });
-    await waitFor(() => {
-      expect(screen.getByTestId("grafico-pesas")).toBeTruthy();
-    });
-    afirmarTextoLimpio(container.textContent ?? "", "Modo Decisor con grafico de pesas");
 
-    /* Cambiar a modo Tecnico y verificar todo de nuevo */
-    const botonTecnico = screen.getByRole("radio", { name: "Técnico" });
-    fireEvent.click(botonTecnico);
-    await waitFor(() => {
-      expect(usarTiendaRindex.getState().modo).toBe("tecnico");
-    });
-    afirmarTextoLimpio(container.textContent ?? "", "Modo Tecnico con grafico de pesas");
+    /* Verificar las 6 vistas analiticas en Decisor y en Tecnico */
+    for (const modoNombre of ["decisor", "tecnico"] as const) {
+      if (modoNombre === "tecnico") {
+        fireEvent.click(screen.getByRole("radio", { name: "Técnico" }));
+        await waitFor(() => {
+          expect(usarTiendaRindex.getState().modo).toBe("tecnico");
+        });
+      }
 
-    act(() => {
-      usarTiendaRindex.getState().establecerSeccionActiva("mapa_brecha");
-    });
-    await waitFor(() => {
-      expect(screen.getByTestId("ficha-municipal")).toBeTruthy();
-    });
-    afirmarTextoLimpio(container.textContent ?? "", "Modo Tecnico con mapa y ficha");
+      for (const vista of VISTAS_ANALITICAS) {
+        act(() => {
+          usarTiendaRindex.getState().establecerSeccionActiva(vista.seccion);
+        });
+        await waitFor(() => {
+          expect(screen.getByTestId(vista.testId)).toBeTruthy();
+        });
+        afirmarTextoLimpio(
+          container.textContent ?? "",
+          `Modo ${modoNombre} vista ${vista.seccion}`,
+        );
+      }
+    }
   });
 
-  it("sincroniza el_golpe con Arroz y muestra subtitulo coherente en prioriza", async () => {
+  it("sincroniza el_golpe con Arroz y muestra el rango precalculado exacto en SimuladorEscenarios", async () => {
     render(<App />);
 
     await waitFor(() => {
       expect(screen.getByTestId("frase-gancho-portada").textContent).toContain("681.536");
     });
 
-    expect(usarTiendaRindex.getState().cultivoActivo).toBe("Maíz");
+    /* Entrar a simula en Maiz y comprobar rango combinado exacto precalculado (D10) */
+    act(() => {
+      usarTiendaRindex.getState().establecerSeccionActiva("simula");
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("simulador-rango-combinado").textContent).toContain(
+        "305.976 a 322.441",
+      );
+    });
 
+    /* Entrar a el_golpe sincroniza a Arroz */
     act(() => {
       usarTiendaRindex.getState().establecerSeccionActiva("el_golpe");
     });
-
     await waitFor(() => {
       expect(usarTiendaRindex.getState().cultivoActivo).toBe("Arroz");
     });
     expect(screen.getByTestId("panel-subtitulo").textContent).toContain("cinco municipios");
 
+    /* Entrar a prioriza muestra su subtitulo propio y la tabla de prioridad */
     act(() => {
       usarTiendaRindex.getState().establecerSeccionActiva("prioriza");
     });
     await waitFor(() => {
-      expect(screen.getByTestId("panel-subtitulo").textContent).toContain("2.000 ponderaciones");
+      expect(screen.getByTestId("tabla-prioridad")).toBeTruthy();
     });
+    expect(screen.getByTestId("panel-subtitulo").textContent).toContain("2.000 ponderaciones");
   });
 });

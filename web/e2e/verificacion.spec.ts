@@ -5,17 +5,17 @@ const ANCHOS: ReadonlyArray<{ nombre: string; width: number; height: number }> =
   { nombre: "movil 390 px", width: 390, height: 844 },
 ];
 
-const SECCIONES_TABLERO: readonly string[] = [
-  "panorama",
-  "el_golpe",
-  "mapa_brecha",
-  "por_que_rinde_menos",
-  "lo_que_no_sabemos",
-  "matriz",
-  "simula",
-  "prioriza",
-  "conexion_la_mojana",
-  "metodologia",
+const SECCIONES_CON_VISTA: ReadonlyArray<{ id: string; testIdEsperado?: string }> = [
+  { id: "panorama" },
+  { id: "el_golpe" },
+  { id: "mapa_brecha" },
+  { id: "por_que_rinde_menos", testIdEsperado: "grafico-pesas" },
+  { id: "lo_que_no_sabemos", testIdEsperado: "panel-calidad" },
+  { id: "matriz", testIdEsperado: "grafico-matriz" },
+  { id: "simula", testIdEsperado: "simulador-escenarios" },
+  { id: "prioriza", testIdEsperado: "tabla-prioridad" },
+  { id: "conexion_la_mojana" },
+  { id: "metodologia", testIdEsperado: "panel-metodologia" },
 ];
 
 for (const vista of ANCHOS) {
@@ -46,7 +46,6 @@ for (const vista of ANCHOS) {
         expect(separadosHorizontal || separadosVertical).toBe(true);
       }
 
-      /* Panel visual y panel narrativo dentro del tablero nunca se superponen */
       const cajaVisual = await page.getByTestId("panel-fijo").boundingBox();
       const cajaNarrativa = await page.locator(".tablero-narrativa").boundingBox();
       expect(cajaVisual).not.toBeNull();
@@ -100,9 +99,7 @@ for (const vista of ANCHOS) {
       await page.goto("/", { waitUntil: "networkidle" });
       await expect(page.getByTestId("frase-gancho-portada")).toBeVisible();
 
-      const pasoGolpe = page.locator("#el_golpe");
-      await pasoGolpe.scrollIntoViewIfNeeded();
-      await pasoGolpe.click();
+      await page.getByRole("button", { name: "Arroz 2021", exact: true }).click();
       await page.waitForTimeout(800);
 
       const botonArroz = page.locator('.pildora-cultivo[data-cultivo="Arroz"]');
@@ -130,7 +127,7 @@ for (const vista of ANCHOS) {
       expect(scrollOk).toBe(true);
     });
 
-    test("los filtros por departamento, cuadrante y linea de tiempo actualizan KPIs y mapa sin desbordamiento", async ({
+    test("los filtros, linea de tiempo, simulador y tabla de prioridad operan sin desbordamiento", async ({
       page,
     }) => {
       await page.goto("/", { waitUntil: "networkidle" });
@@ -140,7 +137,7 @@ for (const vista of ANCHOS) {
 
       /* Filtrar por Cordoba (23) */
       await page.getByTestId("filtro-departamento").selectOption("23");
-      await page.waitForTimeout(250);
+      await page.waitForTimeout(200);
       const prodCordoba = await page.getByTestId("kpi-produccion").textContent();
       expect(prodCordoba).not.toBe(prodInicial);
       const atenuados = await page.locator('path.municipio-ruta[data-atenuado="true"]').count();
@@ -152,25 +149,37 @@ for (const vista of ANCHOS) {
 
       /* Seleccionar anio 2021 en la linea de tiempo */
       await page.getByRole("button", { name: "2021", exact: true }).click();
-      await page.waitForTimeout(300);
+      await page.waitForTimeout(250);
       await expect(page.locator(".mapa-bloque")).toHaveAttribute("data-modo-mapa", "anio");
       await expect(page.getByTestId("mapa-leyenda")).toContainText("Rendimiento 2021");
 
-      /* Sin desbordamiento horizontal tras activar todos los filtros */
+      /* Limpiar filtros restaura el total regional inicial */
+      await page.getByRole("button", { name: "Limpiar filtros" }).click();
+      await page.waitForTimeout(150);
+      await expect(page.getByTestId("kpi-produccion")).toHaveText(prodInicial ?? "");
+
+      /* Abrir simulador y ajustar deslizador a 50 % */
+      await page.getByRole("button", { name: "Escenarios", exact: true }).click();
+      await expect(page.getByTestId("simulador-escenarios")).toBeVisible();
+      await page.getByTestId("simulador-deslizador").fill("50");
+      await expect(page.getByTestId("simulador-pct-valor")).toHaveText("50 %");
+
+      /* Abrir tabla de prioridad y comprobar filas */
+      await page.getByRole("button", { name: "Prioridad", exact: true }).click();
+      await expect(page.getByTestId("tabla-prioridad")).toBeVisible();
+      const filasTabla = await page.locator("tbody tr.fila-prioridad").count();
+      expect(filasTabla).toBeGreaterThan(10);
+
+      /* Sin desbordamiento horizontal tras recorrer todas las vistas */
       const scrollOk = await page.evaluate(
         () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
       );
       expect(scrollOk).toBe(true);
-
-      /* Limpiar filtros restaura el total regional inicial */
-      await page.getByRole("button", { name: "Limpiar filtros" }).click();
-      await page.waitForTimeout(200);
-      await expect(page.getByTestId("kpi-produccion")).toHaveText(prodInicial ?? "");
     });
   });
 }
 
-test("las 11 secciones cargan sin errores de consola ni peticiones a dominios externos", async ({
+test("las 11 secciones y todas sus vistas analiticas cargan sin errores ni peticiones externas", async ({
   page,
 }) => {
   const erroresConsola: string[] = [];
@@ -196,19 +205,21 @@ test("las 11 secciones cargan sin errores de consola ni peticiones a dominios ex
   await expect(page.locator("#portada")).toBeVisible();
   await expect(page.getByTestId("frase-gancho-portada")).toContainText("681.536");
 
-  /* Recorrer las 10 secciones del tablero (total 11 secciones con portada) */
-  for (const id of SECCIONES_TABLERO) {
-    const paso = page.locator(`#${id}`);
+  for (const sec of SECCIONES_CON_VISTA) {
+    const paso = page.locator(`#${sec.id}`);
     await expect(paso).toBeAttached();
     await paso.click();
-    await page.waitForTimeout(180);
+    if (sec.testIdEsperado) {
+      await expect(page.getByTestId(sec.testIdEsperado)).toBeVisible();
+    }
+    await page.waitForTimeout(150);
   }
 
-  /* Probar tambien cambio a Yuca y Maiz para confirmar carga de todos los JSON */
+  /* Probar tambien cambio a Yuca y Maiz */
   await page.locator('.pildora-cultivo[data-cultivo="Yuca"]').click();
-  await page.waitForTimeout(250);
+  await page.waitForTimeout(200);
   await page.locator('.pildora-cultivo[data-cultivo="Maíz"]').click();
-  await page.waitForTimeout(250);
+  await page.waitForTimeout(200);
 
   expect(erroresConsola, `Errores de consola: ${erroresConsola.join("; ")}`).toEqual([]);
   expect(erroresPagina, `Errores de pagina: ${erroresPagina.join("; ")}`).toEqual([]);

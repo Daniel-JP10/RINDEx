@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   cargarCalidad,
+  cargarEscenarios,
   cargarHallazgos,
+  cargarMeta,
   cargarMunicipiosCultivo,
   cargarRegional,
   cargarSistemas,
@@ -11,7 +13,9 @@ import {
 } from "../datos/cargador.ts";
 import { usarTiendaRindex, type CultivoClave, type IdSeccion } from "../estado/tiendaRindex.ts";
 import type { ContratoCalidad } from "../tipos/generados/calidad.ts";
+import type { ContratoEscenarios } from "../tipos/generados/escenarios.ts";
 import type { ContratoHallazgos } from "../tipos/generados/hallazgos.ts";
+import type { ContratoMeta } from "../tipos/generados/meta.ts";
 import type { ContratoRegional } from "../tipos/generados/regional.ts";
 import type { ContratoSistemas } from "../tipos/generados/sistemas.ts";
 import {
@@ -29,8 +33,13 @@ import {
 } from "../utilidades/tablero.ts";
 import { BuscadorMunicipio } from "./BuscadorMunicipio.tsx";
 import { FichaMunicipal } from "./FichaMunicipal.tsx";
+import { GraficoMatriz } from "./GraficoMatriz.tsx";
 import { GraficoPesas } from "./GraficoPesas.tsx";
 import { MapaCaribe, type ModoMapaCaribe } from "./MapaCaribe.tsx";
+import { PanelCalidad } from "./PanelCalidad.tsx";
+import { PanelMetodologia } from "./PanelMetodologia.tsx";
+import { SimuladorEscenarios } from "./SimuladorEscenarios.tsx";
+import { TablaPrioridad } from "./TablaPrioridad.tsx";
 
 const CODIGOS_MOJANA_TOP5: readonly string[] = [
   "70429",
@@ -40,6 +49,22 @@ const CODIGOS_MOJANA_TOP5: readonly string[] = [
   "70708",
 ];
 const CODIGOS_CIERRE_MOJANA: readonly string[] = ["70265", "70708"];
+const MUNICIPIOS_CRUCE_MOJANA: ReadonlyArray<{ codigo: string; nombre: string }> = [
+  { codigo: "70265", nombre: "Guaranda" },
+  { codigo: "70708", nombre: "San Marcos" },
+  { codigo: "13006", nombre: "Achí" },
+  { codigo: "70771", nombre: "Sucre" },
+  { codigo: "13655", nombre: "San Jacinto del Cauca" },
+];
+
+type VistaPanelActivo =
+  | "mapa"
+  | "pesas"
+  | "calidad"
+  | "matriz"
+  | "simulador"
+  | "prioridad"
+  | "metodologia";
 
 interface PasoNarrativoRender {
   id: Exclude<IdSeccion, "portada">;
@@ -67,6 +92,7 @@ export function ContenedorScroll(): React.JSX.Element {
 
   const establecerCultivo = usarTiendaRindex((s) => s.establecerCultivo);
   const establecerSeccionActiva = usarTiendaRindex((s) => s.establecerSeccionActiva);
+  const seleccionarMunicipio = usarTiendaRindex((s) => s.seleccionarMunicipio);
   const establecerDepartamentoFiltro = usarTiendaRindex((s) => s.establecerDepartamentoFiltro);
   const establecerCuadranteFiltro = usarTiendaRindex((s) => s.establecerCuadranteFiltro);
   const establecerAnioActivo = usarTiendaRindex((s) => s.establecerAnioActivo);
@@ -78,6 +104,8 @@ export function ContenedorScroll(): React.JSX.Element {
   const [regional, setRegional] = useState<ContratoRegional | null>(null);
   const [calidad, setCalidad] = useState<ContratoCalidad | null>(null);
   const [sistemas, setSistemas] = useState<ContratoSistemas | null>(null);
+  const [escenarios, setEscenarios] = useState<ContratoEscenarios | null>(null);
+  const [meta, setMeta] = useState<ContratoMeta | null>(null);
   const [errorDatos, setErrorDatos] = useState<string | null>(null);
   const [ultimoRenderMs, setUltimoRenderMs] = useState<number | null>(null);
 
@@ -152,6 +180,44 @@ export function ContenedorScroll(): React.JSX.Element {
       establecerDepartamentoFiltro(null);
     }
   }, [seccionActiva, establecerCultivo, establecerAnioActivo, establecerDepartamentoFiltro]);
+
+  /* Carga perezosa: escenarios solo al abrir simulador y meta solo en metodologia */
+  useEffect(() => {
+    let cancelado = false;
+    if (seccionActiva === "simula" && !escenarios) {
+      cargarEscenarios()
+        .then((datos) => {
+          if (!cancelado) {
+            setEscenarios(datos);
+          }
+        })
+        .catch((err: unknown) => {
+          if (!cancelado) {
+            setErrorDatos(
+              err instanceof Error ? err.message : "No fue posible cargar los escenarios.",
+            );
+          }
+        });
+    }
+    if (seccionActiva === "metodologia" && !meta) {
+      cargarMeta()
+        .then((datos) => {
+          if (!cancelado) {
+            setMeta(datos);
+          }
+        })
+        .catch((err: unknown) => {
+          if (!cancelado) {
+            setErrorDatos(
+              err instanceof Error ? err.message : "No fue posible cargar la ficha metodológica.",
+            );
+          }
+        });
+    }
+    return () => {
+      cancelado = true;
+    };
+  }, [seccionActiva, escenarios, meta]);
 
   /* Sincroniza el paso activo al desplazar el riel interno en escritorio */
   useEffect(() => {
@@ -499,16 +565,16 @@ export function ContenedorScroll(): React.JSX.Element {
   }, [departamentoFiltro]);
 
   const estadoPanel = useMemo<{
-    mostrarPesas: boolean;
+    vista: VistaPanelActivo;
     modoMapa: ModoMapaCaribe;
     titulo: string;
     subtitulo: string;
     codigosResaltados: readonly string[];
     acercarACodigos: readonly string[];
   }>(() => {
-    if (anioActivo !== null && seccionVisual !== "por_que_rinde_menos") {
+    if (anioActivo !== null) {
       return {
-        mostrarPesas: false,
+        vista: "mapa",
         modoMapa: "anio",
         titulo: `Rendimiento en ${anioActivo} — ${cultivoActivo}`,
         subtitulo: `Distribución municipal en ${nombreDeptoActivo} para el año ${anioActivo}`,
@@ -520,7 +586,7 @@ export function ContenedorScroll(): React.JSX.Element {
     switch (seccionVisual) {
       case "panorama":
         return {
-          mostrarPesas: false,
+          vista: "mapa",
           modoMapa: "dominante",
           titulo: "Cultivo dominante en el Caribe",
           subtitulo: "Mayor producción acumulada por municipio entre 2019 y 2025",
@@ -529,7 +595,7 @@ export function ContenedorScroll(): React.JSX.Element {
         };
       case "el_golpe":
         return {
-          mostrarPesas: false,
+          vista: "mapa",
           modoMapa: "arroz_2021",
           titulo: "Arroz sin cosechar en 2021 — La Mojana",
           subtitulo:
@@ -539,7 +605,7 @@ export function ContenedorScroll(): React.JSX.Element {
         };
       case "por_que_rinde_menos":
         return {
-          mostrarPesas: true,
+          vista: "pesas",
           modoMapa: "brecha",
           titulo: "Rendimiento por sistema productivo",
           subtitulo: "Comparación departamental e intramunicipal con multiplicadores ×",
@@ -548,34 +614,34 @@ export function ContenedorScroll(): React.JSX.Element {
         };
       case "lo_que_no_sabemos":
         return {
-          mostrarPesas: false,
+          vista: "calidad",
           modoMapa: "brecha",
-          titulo: `Precisión del registro — ${cultivoActivo}`,
-          subtitulo: "El rayado identifica los municipios con datos repetidos o redondeados",
+          titulo: "Calidad de registro y niveles de evidencia",
+          subtitulo: "Repetición interanual, valores redondos y cambio de reporte desde 2022",
           codigosResaltados: [],
           acercarACodigos: [],
         };
       case "matriz":
         return {
-          mostrarPesas: false,
+          vista: "matriz",
           modoMapa: "brecha",
-          titulo: `Tipología de decisión — ${cultivoActivo}`,
-          subtitulo: "Rendimiento relativo y estabilidad interanual por municipio",
+          titulo: `Matriz de decisión — ${cultivoActivo}`,
+          subtitulo: "Rendimiento medio frente a variabilidad interanual (tamaño según producción)",
           codigosResaltados: [],
           acercarACodigos: [],
         };
       case "simula":
         return {
-          mostrarPesas: false,
+          vista: "simulador",
           modoMapa: "brecha",
-          titulo: `Escenarios de ganancia — ${cultivoActivo}`,
-          subtitulo: "Rangos conservadores a optimistas sobre la superficie actual",
+          titulo: `Simulador de escenarios — ${cultivoActivo}`,
+          subtitulo: "Rangos conservadores a optimistas sin doble conteo sobre la superficie actual",
           codigosResaltados: [],
           acercarACodigos: [],
         };
       case "prioriza":
         return {
-          mostrarPesas: false,
+          vista: "prioridad",
           modoMapa: "prioriza",
           titulo: `Prioridad municipal — ${cultivoActivo}`,
           subtitulo:
@@ -585,7 +651,7 @@ export function ContenedorScroll(): React.JSX.Element {
         };
       case "conexion_la_mojana":
         return {
-          mostrarPesas: false,
+          vista: "mapa",
           modoMapa: "cierre",
           titulo: "Cruce en La Mojana — Arroz",
           subtitulo:
@@ -595,17 +661,17 @@ export function ContenedorScroll(): React.JSX.Element {
         };
       case "metodologia":
         return {
-          mostrarPesas: false,
+          vista: "metodologia",
           modoMapa: "brecha",
-          titulo: `Cobertura territorial — ${cultivoActivo}`,
-          subtitulo: "195 municipios continentales en siete departamentos del Caribe",
+          titulo: "Metodología, fuentes oficiales y reproducibilidad",
+          subtitulo: "Parámetros preespecificados, reglas de muestra y verificación criptográfica",
           codigosResaltados: [],
           acercarACodigos: [],
         };
       case "mapa_brecha":
       default:
         return {
-          mostrarPesas: false,
+          vista: "mapa",
           modoMapa: "brecha",
           titulo: `Brecha de rendimiento — ${cultivoActivo}`,
           subtitulo: "Diferencia frente a los mejores municipios del mismo departamento",
@@ -621,6 +687,16 @@ export function ContenedorScroll(): React.JSX.Element {
   const activarCapitulo = (id: Exclude<IdSeccion, "portada">): void => {
     bloquearObserverHastaRef.current = Date.now() + 800;
     establecerSeccionActiva(id);
+    if (
+      id === "por_que_rinde_menos" ||
+      id === "lo_que_no_sabemos" ||
+      id === "matriz" ||
+      id === "simula" ||
+      id === "prioriza" ||
+      id === "metodologia"
+    ) {
+      establecerAnioActivo(null);
+    }
     const destino = document.getElementById(id);
     if (destino && rielPasosRef.current && window.innerWidth > 960) {
       const riel = rielPasosRef.current;
@@ -848,7 +924,10 @@ export function ContenedorScroll(): React.JSX.Element {
                   {estadoPanel.subtitulo}
                 </span>
               </div>
-              {!estadoPanel.mostrarPesas ? (
+              {estadoPanel.vista === "mapa" ||
+              estadoPanel.vista === "matriz" ||
+              estadoPanel.vista === "simulador" ||
+              estadoPanel.vista === "prioridad" ? (
                 <BuscadorMunicipio municipios={opcionesBuscador} />
               ) : null}
             </div>
@@ -859,8 +938,67 @@ export function ContenedorScroll(): React.JSX.Element {
               </div>
             ) : null}
 
-            {estadoPanel.mostrarPesas ? (
+            {estadoPanel.vista === "mapa" && seccionVisual === "conexion_la_mojana" ? (
+              <div className="mojana-cruce-pills" aria-label="Municipios del cruce en La Mojana">
+                {MUNICIPIOS_CRUCE_MOJANA.map((m) => (
+                  <button
+                    key={m.codigo}
+                    type="button"
+                    className="boton-cruce-mojana"
+                    aria-pressed={municipioSeleccionado === m.codigo}
+                    onClick={() => {
+                      establecerCultivo("Arroz");
+                      seleccionarMunicipio(m.codigo);
+                    }}
+                  >
+                    {m.nombre}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            {estadoPanel.vista === "pesas" ? (
               <GraficoPesas sistemas={sistemas} hallazgos={hallazgos} />
+            ) : estadoPanel.vista === "calidad" ? (
+              <PanelCalidad calidad={calidad} />
+            ) : estadoPanel.vista === "simulador" ? (
+              <SimuladorEscenarios escenarios={escenarios} />
+            ) : estadoPanel.vista === "metodologia" ? (
+              <PanelMetodologia meta={meta} />
+            ) : estadoPanel.vista === "matriz" ? (
+              <div
+                className={
+                  fichaActiva ? "area-mapa-y-ficha area-con-ficha" : "area-mapa-y-ficha"
+                }
+              >
+                <GraficoMatriz
+                  datosCultivo={datosCultivo}
+                  departamentoFiltro={departamentoFiltro}
+                  cuadranteFiltro={cuadranteFiltro}
+                />
+                <FichaMunicipal
+                  municipio={fichaActiva}
+                  totalElegibles={totalElegibles}
+                  anioActivo={anioActivo}
+                />
+              </div>
+            ) : estadoPanel.vista === "prioridad" ? (
+              <div
+                className={
+                  fichaActiva ? "area-mapa-y-ficha area-con-ficha" : "area-mapa-y-ficha"
+                }
+              >
+                <TablaPrioridad
+                  datosCultivo={datosCultivo}
+                  departamentoFiltro={departamentoFiltro}
+                  cuadranteFiltro={cuadranteFiltro}
+                />
+                <FichaMunicipal
+                  municipio={fichaActiva}
+                  totalElegibles={totalElegibles}
+                  anioActivo={anioActivo}
+                />
+              </div>
             ) : (
               <div
                 className={
@@ -896,7 +1034,7 @@ export function ContenedorScroll(): React.JSX.Element {
               </div>
             )}
 
-            {modo === "tecnico" && !estadoPanel.mostrarPesas && ultimoRenderMs !== null ? (
+            {modo === "tecnico" && estadoPanel.vista === "mapa" && ultimoRenderMs !== null ? (
               <div className="panel-nota-rendimiento cifra-tabular">
                 Proyección vectorial de 195 municipios y 7 departamentos en{" "}
                 {ultimoRenderMs.toFixed(1)} ms.
