@@ -4,7 +4,7 @@
 - **Región**: Caribe
 - **Umbral base de elegibilidad**: `500 ha` y `4` años con dato
 - **Semilla bootstrap**: `2026` (`5.000` réplicas principales; `1.000` en variantes de robustez)
-- **Tiempo total de ejecución**: `65,44 s`
+- **Tiempo total de ejecución**: `106,29 s`
 
 ## 1. Clasificación climática anual ENSO (ONI de NOAA, 2019-2025)
 

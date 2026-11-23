@@ -1,6 +1,8 @@
 import type { MunicipioCultivoItem } from "../datos/cargador.ts";
 import { usarTiendaRindex } from "../estado/tiendaRindex.ts";
 import {
+  etiquetarCuadrante,
+  etiquetarEvidencia,
   formatearDecimal,
   formatearEntero,
   formatearPorcentaje,
@@ -8,14 +10,15 @@ import {
 
 interface PropsFichaMunicipal {
   municipio: MunicipioCultivoItem | null;
+  totalElegibles?: number;
   alCerrar?: () => void;
 }
 
 export function FichaMunicipal({
   municipio,
+  totalElegibles,
   alCerrar,
 }: PropsFichaMunicipal): React.JSX.Element {
-  const modo = usarTiendaRindex((s) => s.modo);
   const cultivoActivo = usarTiendaRindex((s) => s.cultivoActivo);
   const seleccionarMunicipio = usarTiendaRindex((s) => s.seleccionarMunicipio);
 
@@ -23,10 +26,10 @@ export function FichaMunicipal({
     return (
       <aside className="ficha-municipal" aria-label="Ficha municipal">
         <h3>Ficha municipal</h3>
-        <p className="portada-nota">
-          Haz clic sobre un municipio en el mapa o usa el buscador superior para
-          inspeccionar su brecha de rendimiento en {cultivoActivo.toLowerCase()},
-          serie histórica 2019–2025 y nivel de evidencia.
+        <p className="texto-secundario">
+          Haz clic sobre un municipio en el mapa o usa el buscador superior para revisar su
+          brecha de rendimiento en {cultivoActivo.toLowerCase()}, serie histórica 2019–2025 y
+          precisión del registro.
         </p>
       </aside>
     );
@@ -42,7 +45,7 @@ export function FichaMunicipal({
     .sort((a, b) => a.anio - b.anio);
 
   const anchoSvg = 240;
-  const altoSvg = 72;
+  const altoSvg = 68;
   const minRend =
     puntosSerie.length > 0
       ? Math.min(...puntosSerie.map((p) => p.rendimiento_tha ?? 0)) * 0.85
@@ -69,7 +72,10 @@ export function FichaMunicipal({
   };
 
   const rutaLinea = puntosSerie
-    .map((p, i) => `${i === 0 ? "M" : "L"}${coordX(i).toFixed(1)},${coordY(p.rendimiento_tha ?? 0).toFixed(1)}`)
+    .map(
+      (p, i) =>
+        `${i === 0 ? "M" : "L"}${coordX(i).toFixed(1)},${coordY(p.rendimiento_tha ?? 0).toFixed(1)}`,
+    )
     .join(" ");
 
   const brechaP10 = municipio.brecha.brecha_p10_tha ?? 0;
@@ -91,6 +97,21 @@ export function FichaMunicipal({
         ].join(" ")
       : "";
 
+  const textoPrioridad =
+    municipio.priorizacion.rango !== null
+      ? totalElegibles && totalElegibles > 0
+        ? `puesto ${municipio.priorizacion.rango} de ${totalElegibles}, entre ${Math.round(
+            municipio.priorizacion.rango_p10 ?? municipio.priorizacion.rango,
+          )} y ${Math.round(
+            municipio.priorizacion.rango_p90 ?? municipio.priorizacion.rango,
+          )} según los pesos`
+        : `puesto ${municipio.priorizacion.rango}, entre ${Math.round(
+            municipio.priorizacion.rango_p10 ?? municipio.priorizacion.rango,
+          )} y ${Math.round(
+            municipio.priorizacion.rango_p90 ?? municipio.priorizacion.rango,
+          )} según los pesos`
+      : "No elegible";
+
   return (
     <aside
       className="ficha-municipal"
@@ -101,7 +122,7 @@ export function FichaMunicipal({
         <div>
           <h3>{municipio.nombre}</h3>
           <span className="buscador-opcion-depto">
-            {municipio.departamento} · DANE {municipio.codigo}
+            {municipio.departamento} · código {municipio.codigo}
           </span>
         </div>
         <button
@@ -115,8 +136,8 @@ export function FichaMunicipal({
       </div>
 
       {!municipio.con_datos ? (
-        <p className="portada-nota">
-          Sin registros de {cultivoActivo.toLowerCase()} en EVA 2019–2025.
+        <p className="texto-secundario">
+          Sin registros de {cultivoActivo.toLowerCase()} entre 2019 y 2025.
         </p>
       ) : (
         <>
@@ -127,14 +148,14 @@ export function FichaMunicipal({
             <div className="ficha-dato-principal cifra-tabular">
               {municipio.elegible && municipio.brecha.brecha_relativa_pct !== null
                 ? formatearPorcentaje(municipio.brecha.brecha_relativa_pct)
-                : "No elegible (< 500 ha o < 4 años)"}
+                : "No elegible (menos de 500 ha o 4 años)"}
             </div>
             {municipio.elegible &&
             municipio.brecha.ganancia_p10_t !== null &&
             municipio.brecha.ganancia_p90_t !== null ? (
               <span className="buscador-opcion-depto cifra-tabular">
-                Ganancia S1: {formatearEntero(municipio.brecha.ganancia_p10_t)} a{" "}
-                {formatearEntero(municipio.brecha.ganancia_p90_t)} t/año (p50:{" "}
+                Ganancia anual: {formatearEntero(municipio.brecha.ganancia_p10_t)} a{" "}
+                {formatearEntero(municipio.brecha.ganancia_p90_t)} t/año (mediana{" "}
                 {formatearEntero(municipio.brecha.ganancia_p50_t ?? 0)} t)
               </span>
             ) : null}
@@ -163,34 +184,33 @@ export function FichaMunicipal({
             <strong className="cifra-tabular">
               {municipio.rendimiento_tha !== null
                 ? `${formatearDecimal(municipio.rendimiento_tha)} t/ha`
-                : "N/D"}
+                : "No disponible"}
             </strong>
           </div>
 
           <div className="ficha-fila-meta">
             <span>Cuadrante</span>
-            <strong>{municipio.priorizacion.cuadrante ?? "No elegible"}</strong>
+            <strong>{etiquetarCuadrante(municipio.priorizacion.cuadrante)}</strong>
           </div>
 
           <div className="ficha-fila-meta">
             <span>Evidencia municipal</span>
-            <strong>{municipio.nivel_evidencia}</strong>
+            <strong>{etiquetarEvidencia(municipio.nivel_evidencia)}</strong>
           </div>
 
-          {modo === "tecnico" ? (
-            <div className="ficha-fila-meta">
-              <span>Rango prioridad / CV</span>
-              <strong className="cifra-tabular">
-                {municipio.priorizacion.rango !== null
-                  ? `#${municipio.priorizacion.rango} [${municipio.priorizacion.rango_p10 ?? "-"}; ${municipio.priorizacion.rango_p90 ?? "-"}]`
-                  : "N/A"}{" "}
-                ·{" "}
-                {municipio.cv_interanual_pct !== null
-                  ? `CV ${formatearPorcentaje(municipio.cv_interanual_pct)}`
-                  : "CV N/D"}
-              </strong>
-            </div>
-          ) : null}
+          <div className="ficha-fila-meta ficha-fila-columna">
+            <span>Prioridad en el cultivo</span>
+            <strong className="cifra-tabular">{textoPrioridad}</strong>
+          </div>
+
+          <div className="ficha-fila-meta">
+            <span>Variabilidad interanual</span>
+            <strong className="cifra-tabular">
+              {municipio.cv_interanual_pct !== null
+                ? formatearPorcentaje(municipio.cv_interanual_pct)
+                : "No disponible"}
+            </strong>
+          </div>
         </>
       )}
     </aside>

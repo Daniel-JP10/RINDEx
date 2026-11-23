@@ -8,15 +8,38 @@ import numpy as np
 import pandas as pd
 
 from rindex.agregacion import construir_tablas_agregadas
-from rindex.brecha import calcular_brecha_potencial
+from rindex.brecha import calcular_brecha_potencial_con_replicas
 from rindex.config import ConfiguracionEdicion, cargar_configuracion
 from rindex.escenarios import (
     combinar_escenarios_sin_doble_conteo,
-    construir_escenarios_municipales,
+    construir_escenarios_con_replicas,
     evaluar_s1_lineal,
 )
 from rindex.limpieza import limpiar_eva
 from rindex.prioridad import calcular_indice_prioridad, construir_tipologia_decision
+
+
+def calcular_resumen_sistemas_maiz(periodo_mpio_sistema: pd.DataFrame) -> pd.DataFrame:
+    """Calcula la participacion del area cosechada de maiz por sistema productivo."""
+    sub = periodo_mpio_sistema.loc[periodo_mpio_sistema["cultivo"] == "Maíz"]
+    resumen = (
+        sub.groupby("sistema", as_index=False)
+        .agg(
+            area_cosechada_ha=("area_cosechada", "sum"),
+            produccion_t=("produccion", "sum"),
+            municipios_con_dato=("codigo_dane_municipio", "nunique"),
+        )
+        .sort_values("sistema")
+        .reset_index(drop=True)
+    )
+    total_area = float(resumen["area_cosechada_ha"].sum())
+    resumen["pct_area_cosechada"] = np.where(
+        total_area > 0.0,
+        resumen["area_cosechada_ha"] / total_area * 100.0,
+        0.0,
+    )
+    return resumen
+
 
 REFERENCIA_INICIAL_S1_PCT: dict[str, float] = {
     "Maíz": 19.0,
@@ -387,20 +410,24 @@ def ejecutar_priorizacion_completa(
     ruta_res_hip = dir_resultados / "resumen_hipotesis.parquet"
     resumen_hip = pd.read_parquet(ruta_res_hip) if ruta_res_hip.exists() else None
 
-    df_brecha = calcular_brecha_potencial(
+    df_brecha, replicas_s1 = calcular_brecha_potencial_con_replicas(
         periodo_mpio_sistema=tablas["periodo_municipio_sistema"],
         anual_mpio_sistema=tablas["anual_municipio_sistema"],
         cfg=cfg,
     )
-    df_escenarios, df_totales_esc = construir_escenarios_municipales(
-        periodo_mpio_cultivo=tablas["periodo_municipio_cultivo"],
-        periodo_mpio_sistema=tablas["periodo_municipio_sistema"],
-        anual_mpio_cultivo=tablas["anual_municipio_cultivo"],
-        anual_mpio_sistema=tablas["anual_municipio_sistema"],
-        df_brecha=df_brecha,
-        cfg=cfg,
-        resumen_hipotesis=resumen_hip,
+    df_escenarios, df_totales_esc, df_totales_agreg, df_replicas = (
+        construir_escenarios_con_replicas(
+            periodo_mpio_cultivo=tablas["periodo_municipio_cultivo"],
+            periodo_mpio_sistema=tablas["periodo_municipio_sistema"],
+            anual_mpio_cultivo=tablas["anual_municipio_cultivo"],
+            anual_mpio_sistema=tablas["anual_municipio_sistema"],
+            df_brecha=df_brecha,
+            cfg=cfg,
+            resumen_hipotesis=resumen_hip,
+            replicas_s1=replicas_s1,
+        )
     )
+    df_resumen_maiz = calcular_resumen_sistemas_maiz(tablas["periodo_municipio_sistema"])
     df_tipologia = construir_tipologia_decision(tablas["periodo_municipio_cultivo"])
     df_prioridad, df_resumen_tau = calcular_indice_prioridad(
         df_tipologia=df_tipologia,
@@ -417,6 +444,11 @@ def ejecutar_priorizacion_completa(
     df_brecha.to_parquet(dir_resultados / "brecha.parquet", index=False)
     df_escenarios.to_parquet(dir_resultados / "escenarios.parquet", index=False)
     df_totales_esc.to_parquet(dir_resultados / "escenarios_regionales.parquet", index=False)
+    df_totales_agreg.to_parquet(
+        dir_resultados / "escenarios_totales_agregados.parquet", index=False
+    )
+    df_replicas.to_parquet(dir_resultados / "replicas_escenarios.parquet", index=False)
+    df_resumen_maiz.to_parquet(dir_resultados / "resumen_sistemas_maiz.parquet", index=False)
     df_tipologia.to_parquet(dir_resultados / "tipologia.parquet", index=False)
     df_prioridad.to_parquet(dir_resultados / "prioridad.parquet", index=False)
 
@@ -439,6 +471,8 @@ def ejecutar_priorizacion_completa(
         "brecha": df_brecha,
         "escenarios": df_escenarios,
         "escenarios_regionales": df_totales_esc,
+        "escenarios_totales_agregados": df_totales_agreg,
+        "resumen_sistemas_maiz": df_resumen_maiz,
         "tipologia": df_tipologia,
         "prioridad": df_prioridad,
     }, tiempo_s

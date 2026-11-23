@@ -6,12 +6,17 @@ import "d3-transition";
 import type { FeatureCollection, Geometry } from "geojson";
 import { feature } from "topojson-client";
 import type {
+  ContratoMunicipiosCultivo,
   ContratoTopoJsonCaribe,
   MunicipioCultivoItem,
 } from "../datos/cargador.ts";
-import type { ContratoMunicipiosCultivo } from "../datos/cargador.ts";
 import { usarTiendaRindex, type CultivoClave } from "../estado/tiendaRindex.ts";
-import { formatearDecimal, formatearPorcentaje } from "../utilidades/formato.ts";
+import {
+  etiquetarEvidencia,
+  formatearDecimal,
+  formatearEntero,
+  formatearPorcentaje,
+} from "../utilidades/formato.ts";
 
 interface PropiedadGeo {
   codigo: string;
@@ -19,39 +24,78 @@ interface PropiedadGeo {
   departamento: string;
 }
 
+export type ModoMapaCaribe = "brecha" | "dominante" | "arroz_2021" | "prioriza" | "cierre";
+
 export interface PropsMapaCaribe {
   topoJson: ContratoTopoJsonCaribe;
   datosCultivo: ContratoMunicipiosCultivo | null;
+  modoVisual?: ModoMapaCaribe;
+  cultivosDominantes?: ReadonlyMap<string, CultivoClave>;
+  codigosResaltados?: readonly string[];
+  acercarACodigos?: readonly string[];
   alMedirRender?: (milisegundos: number) => void;
 }
 
-const PALETAS_CLARO: Record<CultivoClave, readonly string[]> = {
-  "Maíz": ["#DEDAC2", "#C8B994", "#B09B68", "#977D3E", "#7B5F0B"],
-  "Yuca": ["#E4D5C4", "#D4B09A", "#C28B71", "#AE674B", "#964125"],
-  "Arroz": ["#CFDBCE", "#A5BEB1", "#7CA195", "#53857A", "#22685F"],
+/* Escalas secuenciales vibrantes de 5 pasos con giro de tono (identicas en claro y oscuro) */
+const PALETAS_SECUENCIALES: Record<CultivoClave, readonly string[]> = {
+  "Maíz": ["#FFF4CC", "#FFD84D", "#F2B705", "#C77C02", "#7A4A00"],
+  "Yuca": ["#FDE4DA", "#F7A47F", "#E4572E", "#B23A1B", "#6E2410"],
+  "Arroz": ["#D6F5F0", "#7FD8CB", "#17A398", "#0E7469", "#08443E"],
 };
 
-const PALETAS_OSCURO: Record<CultivoClave, readonly string[]> = {
-  "Maíz": ["#333422", "#5A522A", "#847232", "#AF9339", "#DFB83F"],
-  "Yuca": ["#332D24", "#5A4031", "#83543E", "#AD684C", "#DC7D5B"],
-  "Arroz": ["#22342E", "#30524A", "#3E7268", "#4C9387", "#5AB8AA"],
+const COLORES_DOMINANTES: Record<CultivoClave, string> = {
+  "Maíz": "#F2B705",
+  "Yuca": "#E4572E",
+  "Arroz": "#17A398",
 };
 
-const ETIQUETAS_ESCALA: readonly string[] = [
-  "0 % (ref.)",
+const ETIQUETAS_ESCALA_BRECHA: readonly string[] = [
+  "0 % (referencia)",
   "> 0–15 %",
   "15–30 %",
   "30–50 %",
   "> 50 %",
 ];
 
-const escalaPaso = scaleThreshold<number, number>()
+const ETIQUETAS_ESCALA_2021: readonly string[] = [
+  "0–5 %",
+  "5–15 %",
+  "15–30 %",
+  "30–50 %",
+  "> 50 %",
+];
+
+const escalaPasoBrecha = scaleThreshold<number, number>()
   .domain([0.05, 15, 30, 50])
   .range([0, 1, 2, 3, 4]);
+
+const escalaPaso2021 = scaleThreshold<number, number>()
+  .domain([5, 15, 30, 50])
+  .range([0, 1, 2, 3, 4]);
+
+function obtenerTasaNoCosechada2021(mData: MunicipioCultivoItem | undefined): {
+  tasaPct: number | null;
+  noCosechadaHa: number | null;
+} {
+  if (!mData) {
+    return { tasaPct: null, noCosechadaHa: null };
+  }
+  const fila21 = mData.serie_anual.find((s) => s.anio === 2021);
+  if (!fila21 || fila21.area_sembrada_ha <= 0) {
+    return { tasaPct: null, noCosechadaHa: null };
+  }
+  const diff = Math.max(0, fila21.area_sembrada_ha - fila21.area_cosechada_ha);
+  const tasaPct = (diff / fila21.area_sembrada_ha) * 100;
+  return { tasaPct, noCosechadaHa: diff };
+}
 
 export function MapaCaribe({
   topoJson,
   datosCultivo,
+  modoVisual = "brecha",
+  cultivosDominantes,
+  codigosResaltados = [],
+  acercarACodigos = [],
   alMedirRender,
 }: PropsMapaCaribe): React.JSX.Element {
   const cultivoActivo = usarTiendaRindex((s) => s.cultivoActivo);
@@ -64,8 +108,8 @@ export function MapaCaribe({
   const primerMontajeRef = useRef(true);
 
   const [dimensiones, setDimensiones] = useState<{ ancho: number; alto: number }>({
-    ancho: 760,
-    alto: 520,
+    ancho: 720,
+    alto: 460,
   });
   const [municipioHover, setMunicipioHover] = useState<string | null>(null);
 
@@ -77,7 +121,7 @@ export function MapaCaribe({
     const actualizar = (): void => {
       const anchoMedido = el.clientWidth;
       if (anchoMedido > 120) {
-        const altoCalc = Math.round(Math.max(380, Math.min(580, anchoMedido * 0.68)));
+        const altoCalc = Math.round(Math.max(260, Math.min(480, anchoMedido * 0.64)));
         setDimensiones({ ancho: anchoMedido, alto: altoCalc });
       }
     };
@@ -100,7 +144,12 @@ export function MapaCaribe({
     return false;
   }, [tema]);
 
-  const paleta = esTemaOscuro ? PALETAS_OSCURO[cultivoActivo] : PALETAS_CLARO[cultivoActivo];
+  const paleta =
+    modoVisual === "arroz_2021" || modoVisual === "cierre"
+      ? PALETAS_SECUENCIALES["Arroz"]
+      : PALETAS_SECUENCIALES[cultivoActivo];
+
+  const conjuntoResaltados = useMemo(() => new Set(codigosResaltados), [codigosResaltados]);
 
   const mapaMunicipiosDatos = useMemo(() => {
     const mapa = new Map<string, MunicipioCultivoItem>();
@@ -138,16 +187,16 @@ export function MapaCaribe({
     return { colMpios: mpiosCol, colDeptos: deptosCol, objetoAjuste: ajuste };
   }, [topoJson]);
 
-  const { rutasMunicipios, rutasDepartamentos, tiempoGeoMs } = useMemo(() => {
+  const { rutasMunicipios, rutasDepartamentos, tiempoGeoMs, generadorRuta } = useMemo(() => {
     const t0 = typeof performance !== "undefined" ? performance.now() : Date.now();
     const proyeccion = geoMercator().fitExtent(
       [
-        [18, 18],
-        [dimensiones.ancho - 18, dimensiones.alto - 18],
+        [16, 16],
+        [dimensiones.ancho - 16, dimensiones.alto - 16],
       ],
       objetoAjuste as never,
     );
-    const generador = geoPath(proyeccion);
+    const generador = geoPath(proyeccion).digits(1);
 
     const mpios = colMpios.features.map((feat) => ({
       codigo: feat.properties.codigo,
@@ -155,6 +204,7 @@ export function MapaCaribe({
       departamento: feat.properties.departamento,
       d: generador(feat) ?? "",
     }));
+
     const deptos = colDeptos.features.map((feat) => ({
       codigo: feat.properties.codigo,
       nombre: feat.properties.nombre,
@@ -166,15 +216,54 @@ export function MapaCaribe({
       rutasMunicipios: mpios,
       rutasDepartamentos: deptos,
       tiempoGeoMs: t1 - t0,
+      generadorRuta: generador,
     };
   }, [colMpios, colDeptos, objetoAjuste, dimensiones.ancho, dimensiones.alto]);
+
+  const transformCamara = useMemo(() => {
+    if (acercarACodigos.length === 0) {
+      return "translate(0px, 0px) scale(1)";
+    }
+    const conjuntoZoom = new Set(acercarACodigos);
+    let minX = Number.POSITIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+
+    for (const feat of colMpios.features) {
+      if (conjuntoZoom.has(feat.properties.codigo)) {
+        const [[x0, y0], [x1, y1]] = generadorRuta.bounds(feat);
+        if (Number.isFinite(x0) && Number.isFinite(y0)) {
+          minX = Math.min(minX, x0);
+          minY = Math.min(minY, y0);
+          maxX = Math.max(maxX, x1);
+          maxY = Math.max(maxY, y1);
+        }
+      }
+    }
+
+    if (!Number.isFinite(minX) || !Number.isFinite(maxX) || maxX <= minX || maxY <= minY) {
+      return "translate(0px, 0px) scale(1)";
+    }
+    const dx = maxX - minX;
+    const dy = maxY - minY;
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    const escala = Math.min(
+      3.2,
+      Math.max(1.4, 0.56 / Math.max(dx / dimensiones.ancho, dy / dimensiones.alto)),
+    );
+    const tx = dimensiones.ancho / 2 - escala * cx;
+    const ty = dimensiones.alto / 2 - escala * cy;
+    return `translate(${tx.toFixed(1)}px, ${ty.toFixed(1)}px) scale(${escala.toFixed(3)})`;
+  }, [acercarACodigos, colMpios, generadorRuta, dimensiones.ancho, dimensiones.alto]);
 
   useEffect(() => {
     alMedirRender?.(tiempoGeoMs);
   }, [tiempoGeoMs, alMedirRender]);
 
   const nivelEvidenciaCultivo = datosCultivo?.nivel_evidencia_cultivo ?? "alto";
-  const colorNoElegible = esTemaOscuro ? "#5A635D" : "#B9BFAE";
+  const colorNoElegible = esTemaOscuro ? "#3C5447" : "#C9CEBE";
 
   const infoVisualPorCodigo = useMemo(() => {
     const mapa = new Map<
@@ -183,34 +272,76 @@ export function MapaCaribe({
         rellenoSolido: string;
         usaPatronBaja: boolean;
         pasoIndice: number;
-        extrapolado: boolean;
+        esRobusto: boolean;
       }
     >();
 
     for (const mGeo of rutasMunicipios) {
+      if (modoVisual === "dominante") {
+        const dom = cultivosDominantes?.get(mGeo.codigo);
+        mapa.set(mGeo.codigo, {
+          rellenoSolido: dom ? COLORES_DOMINANTES[dom] : colorNoElegible,
+          usaPatronBaja: false,
+          pasoIndice: -1,
+          esRobusto: false,
+        });
+        continue;
+      }
+
       const mData = mapaMunicipiosDatos.get(mGeo.codigo);
+
+      if (modoVisual === "arroz_2021") {
+        const { tasaPct } = obtenerTasaNoCosechada2021(mData);
+        if (tasaPct === null) {
+          mapa.set(mGeo.codigo, {
+            rellenoSolido: colorNoElegible,
+            usaPatronBaja: false,
+            pasoIndice: -1,
+            esRobusto: false,
+          });
+          continue;
+        }
+        const paso = escalaPaso2021(tasaPct);
+        mapa.set(mGeo.codigo, {
+          rellenoSolido: paleta[paso] ?? paleta[0] ?? colorNoElegible,
+          usaPatronBaja: false,
+          pasoIndice: paso,
+          esRobusto: false,
+        });
+        continue;
+      }
+
       if (!mData || !mData.elegible || mData.brecha.brecha_relativa_pct === null) {
         mapa.set(mGeo.codigo, {
           rellenoSolido: colorNoElegible,
           usaPatronBaja: false,
           pasoIndice: -1,
-          extrapolado: false,
+          esRobusto: false,
         });
         continue;
       }
-      const paso = escalaPaso(mData.brecha.brecha_relativa_pct);
+      const paso = escalaPasoBrecha(mData.brecha.brecha_relativa_pct);
       const color = paleta[paso] ?? paleta[0] ?? colorNoElegible;
       const esBaja =
-        mData.nivel_evidencia === "bajo" || nivelEvidenciaCultivo === "bajo";
+        modoVisual !== "cierre" &&
+        (mData.nivel_evidencia === "bajo" || nivelEvidenciaCultivo === "bajo");
       mapa.set(mGeo.codigo, {
         rellenoSolido: color,
         usaPatronBaja: esBaja,
         pasoIndice: paso,
-        extrapolado: mData.calidad.excluido_d4,
+        esRobusto: Boolean(mData.priorizacion.prioridad_robusta),
       });
     }
     return mapa;
-  }, [rutasMunicipios, mapaMunicipiosDatos, colorNoElegible, paleta, nivelEvidenciaCultivo]);
+  }, [
+    rutasMunicipios,
+    modoVisual,
+    cultivosDominantes,
+    mapaMunicipiosDatos,
+    colorNoElegible,
+    paleta,
+    nivelEvidenciaCultivo,
+  ]);
 
   useEffect(() => {
     const svgEl = svgRef.current;
@@ -236,7 +367,7 @@ export function MapaCaribe({
           if (!info) {
             return colorNoElegible;
           }
-          return info.usaPatronBaja
+          return info.usaPatronBaja && info.pasoIndice >= 0
             ? `url(#patron-evidencia-baja-${info.pasoIndice})`
             : info.rellenoSolido;
         });
@@ -244,14 +375,17 @@ export function MapaCaribe({
     } catch {
       // En entornos sin transicion SVG (p. ej. jsdom) React mantiene el atributo fill actualizado.
     }
-  }, [cultivoActivo, infoVisualPorCodigo, colorNoElegible]);
+  }, [cultivoActivo, modoVisual, infoVisualPorCodigo, colorNoElegible]);
 
   const detalleHover = municipioHover
     ? mapaMunicipiosDatos.get(municipioHover) ?? null
     : null;
+  const domHover = municipioHover ? cultivosDominantes?.get(municipioHover) ?? null : null;
+  const info2021Hover =
+    modoVisual === "arroz_2021" ? obtenerTasaNoCosechada2021(detalleHover ?? undefined) : null;
 
   return (
-    <div className="mapa-bloque">
+    <div className="mapa-bloque" data-modo-mapa={modoVisual}>
       <div className="mapa-contenedor" ref={contenedorRef}>
         <svg
           ref={svgRef}
@@ -261,12 +395,12 @@ export function MapaCaribe({
           aria-labelledby="mapa-caribe-titulo mapa-caribe-desc"
         >
           <title id="mapa-caribe-titulo">
-            Mapa de brecha de rendimiento en {cultivoActivo} en la Región Caribe (2019–2025)
+            Mapa territorial de {cultivoActivo} en la Región Caribe (2019–2025)
           </title>
           <desc id="mapa-caribe-desc">
-            Mapa coroplético de los 195 municipios de los 7 departamentos continentales del Caribe
-            coloreados según su brecha relativa p50. Municipios no elegibles en gris de contexto y
-            municipios con evidencia baja marcados con patrón rayado.
+            Mapa vectorial de los 195 municipios de los 7 departamentos continentales del Caribe.
+            Municipios no elegibles en gris de contexto y zonas con menor precisión de registro
+            marcadas con patrón rayado.
           </desc>
 
           <defs>
@@ -281,69 +415,83 @@ export function MapaCaribe({
                 <rect width="8" height="8" fill={colorPaso} />
                 <path
                   d="M-2,2 l4,-4 M0,8 l8,-8 M6,10 l4,-4"
-                  stroke="var(--color-tinta)"
+                  stroke="#1F2A22"
                   strokeOpacity="0.34"
-                  strokeWidth="1.2"
+                  strokeWidth="1.15"
                 />
               </pattern>
             ))}
           </defs>
 
-          <g className="capa-municipios">
-            {rutasMunicipios.map((mGeo) => {
-              const info = infoVisualPorCodigo.get(mGeo.codigo);
-              const relleno =
-                info && info.usaPatronBaja && info.pasoIndice >= 0
-                  ? `url(#patron-evidencia-baja-${info.pasoIndice})`
-                  : (info?.rellenoSolido ?? colorNoElegible);
-              const clases = info?.extrapolado
-                ? "municipio-ruta trazo-indicativo"
-                : "municipio-ruta";
-              const mData = mapaMunicipiosDatos.get(mGeo.codigo);
-              const etiqueta = mData
-                ? `${mData.nombre} (${mData.departamento}): ${
-                    mData.elegible && mData.brecha.brecha_relativa_pct !== null
-                      ? formatearPorcentaje(mData.brecha.brecha_relativa_pct)
-                      : "no elegible"
-                  }`
-                : mGeo.nombre;
+          <g
+            className="mapa-camara"
+            style={{ transform: transformCamara }}
+            data-zoom-activo={acercarACodigos.length > 0 ? "true" : "false"}
+          >
+            <g className="capa-municipios">
+              {rutasMunicipios.map((mGeo) => {
+                const info = infoVisualPorCodigo.get(mGeo.codigo);
+                const relleno =
+                  info && info.usaPatronBaja && info.pasoIndice >= 0
+                    ? `url(#patron-evidencia-baja-${info.pasoIndice})`
+                    : (info?.rellenoSolido ?? colorNoElegible);
+                const estaResaltado = conjuntoResaltados.has(mGeo.codigo);
+                const esRobustoDestacado = modoVisual === "prioriza" && Boolean(info?.esRobusto);
+                const clases = [
+                  "municipio-ruta",
+                  estaResaltado ? "municipio-pulso" : "",
+                  esRobustoDestacado ? "municipio-robusto" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ");
 
-              return (
+                const mData = mapaMunicipiosDatos.get(mGeo.codigo);
+                const etiqueta = mData
+                  ? `${mData.nombre} (${mData.departamento}): ${
+                      mData.elegible && mData.brecha.brecha_relativa_pct !== null
+                        ? formatearPorcentaje(mData.brecha.brecha_relativa_pct)
+                        : "no elegible"
+                    }`
+                  : mGeo.nombre;
+
+                return (
+                  <path
+                    key={mGeo.codigo}
+                    d={mGeo.d}
+                    className={clases}
+                    fill={relleno}
+                    data-codigo={mGeo.codigo}
+                    data-departamento={mGeo.departamento}
+                    data-seleccionado={municipioSeleccionado === mGeo.codigo ? "true" : "false"}
+                    data-resaltado={estaResaltado ? "true" : "false"}
+                    tabIndex={0}
+                    aria-label={etiqueta}
+                    onMouseEnter={() => setMunicipioHover(mGeo.codigo)}
+                    onMouseLeave={() => setMunicipioHover(null)}
+                    onFocus={() => setMunicipioHover(mGeo.codigo)}
+                    onBlur={() => setMunicipioHover(null)}
+                    onClick={() => seleccionarMunicipio(mGeo.codigo)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        seleccionarMunicipio(mGeo.codigo);
+                      }
+                    }}
+                  />
+                );
+              })}
+            </g>
+
+            <g className="capa-departamentos">
+              {rutasDepartamentos.map((dGeo) => (
                 <path
-                  key={mGeo.codigo}
-                  d={mGeo.d}
-                  className={clases}
-                  fill={relleno}
-                  data-codigo={mGeo.codigo}
-                  data-departamento={mGeo.departamento}
-                  data-seleccionado={municipioSeleccionado === mGeo.codigo ? "true" : "false"}
-                  tabIndex={0}
-                  aria-label={etiqueta}
-                  onMouseEnter={() => setMunicipioHover(mGeo.codigo)}
-                  onMouseLeave={() => setMunicipioHover(null)}
-                  onFocus={() => setMunicipioHover(mGeo.codigo)}
-                  onBlur={() => setMunicipioHover(null)}
-                  onClick={() => seleccionarMunicipio(mGeo.codigo)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      seleccionarMunicipio(mGeo.codigo);
-                    }
-                  }}
+                  key={dGeo.codigo}
+                  d={dGeo.d}
+                  className="departamento-ruta"
+                  data-codigo={dGeo.codigo}
                 />
-              );
-            })}
-          </g>
-
-          <g className="capa-departamentos">
-            {rutasDepartamentos.map((dGeo) => (
-              <path
-                key={dGeo.codigo}
-                d={dGeo.d}
-                className="departamento-ruta"
-                data-codigo={dGeo.codigo}
-              />
-            ))}
+              ))}
+            </g>
           </g>
         </svg>
 
@@ -351,54 +499,125 @@ export function MapaCaribe({
           <div className="mapa-tooltip" role="status" aria-live="polite">
             <strong>{detalleHover.nombre}</strong> ({detalleHover.departamento})
             <br />
-            {detalleHover.elegible && detalleHover.brecha.brecha_relativa_pct !== null ? (
+            {modoVisual === "dominante" ? (
+              <span>
+                Cultivo dominante: <strong>{domHover ?? "Sin datos"}</strong>
+              </span>
+            ) : modoVisual === "arroz_2021" && info2021Hover ? (
+              info2021Hover.tasaPct !== null ? (
+                <span className="cifra-tabular">
+                  Sin cosechar en 2021: {formatearPorcentaje(info2021Hover.tasaPct)} (
+                  {formatearEntero(info2021Hover.noCosechadaHa ?? 0)} ha)
+                </span>
+              ) : (
+                <span>Sin registro de arroz en 2021</span>
+              )
+            ) : detalleHover.elegible && detalleHover.brecha.brecha_relativa_pct !== null ? (
               <span className="cifra-tabular">
-                Brecha p50: {formatearPorcentaje(detalleHover.brecha.brecha_relativa_pct)} (
+                Brecha mediana: {formatearPorcentaje(detalleHover.brecha.brecha_relativa_pct)} (
                 {formatearDecimal(detalleHover.brecha.brecha_p50_tha ?? 0)} t/ha)
               </span>
             ) : (
-              <span>No elegible (&lt; 500 ha o &lt; 4 años)</span>
+              <span>No elegible (menos de 500 ha o menos de 4 años)</span>
             )}
           </div>
         ) : null}
       </div>
 
-      <div className="mapa-leyenda" aria-label="Leyenda del mapa">
-        <div className="leyenda-escala">
-          <span>Brecha relativa ({cultivoActivo}):</span>
-          <div className="leyenda-bloques">
-            {paleta.map((hex, i) => (
+      <div className="mapa-leyenda" data-testid="mapa-leyenda" aria-label="Leyenda del mapa">
+        {modoVisual === "dominante" ? (
+          <>
+            <span className="leyenda-escala">
               <span
-                key={hex}
                 className="leyenda-bloque"
-                style={{ backgroundColor: hex }}
-                title={ETIQUETAS_ESCALA[i]}
+                style={{ backgroundColor: COLORES_DOMINANTES["Maíz"] }}
               />
-            ))}
-          </div>
-          <span>0 % a &gt; 50 %</span>
-        </div>
+              Maíz dominante
+            </span>
+            <span className="leyenda-escala">
+              <span
+                className="leyenda-bloque"
+                style={{ backgroundColor: COLORES_DOMINANTES["Yuca"] }}
+              />
+              Yuca dominante
+            </span>
+            <span className="leyenda-escala">
+              <span
+                className="leyenda-bloque"
+                style={{ backgroundColor: COLORES_DOMINANTES["Arroz"] }}
+              />
+              Arroz dominante
+            </span>
+          </>
+        ) : modoVisual === "arroz_2021" ? (
+          <>
+            <div className="leyenda-escala">
+              <span>Área no cosechada 2021 (Arroz):</span>
+              <div className="leyenda-bloques">
+                {paleta.map((hex, i) => (
+                  <span
+                    key={hex}
+                    className="leyenda-bloque"
+                    style={{ backgroundColor: hex }}
+                    title={ETIQUETAS_ESCALA_2021[i]}
+                  />
+                ))}
+              </div>
+              <span>0 % a &gt; 50 %</span>
+            </div>
+            <div className="leyenda-escala">
+              <span className="leyenda-bloque leyenda-bloque-resaltado" />
+              <span>5 municipios de La Mojana</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="leyenda-escala">
+              <span>
+                Brecha relativa ({modoVisual === "cierre" ? "Arroz" : cultivoActivo}):
+              </span>
+              <div className="leyenda-bloques">
+                {paleta.map((hex, i) => (
+                  <span
+                    key={hex}
+                    className="leyenda-bloque"
+                    style={{ backgroundColor: hex }}
+                    title={ETIQUETAS_ESCALA_BRECHA[i]}
+                  />
+                ))}
+              </div>
+              <span>0 % a &gt; 50 %</span>
+            </div>
 
-        <div className="leyenda-escala">
-          <span
-            className="leyenda-bloque"
-            style={{ backgroundColor: colorNoElegible }}
-          />
-          <span>No elegible (&lt; 500 ha)</span>
-        </div>
+            <div className="leyenda-escala">
+              <span
+                className="leyenda-bloque"
+                style={{ backgroundColor: colorNoElegible }}
+              />
+              <span>No elegible</span>
+            </div>
 
-        <div className="leyenda-escala">
-          <svg width="22" height="12" aria-hidden="true">
-            <rect
-              width="22"
-              height="12"
-              rx="2"
-              fill={`url(#patron-evidencia-baja-2)`}
-              stroke="var(--color-linea)"
-            />
-          </svg>
-          <span>Rayado: evidencia baja (datos repetidos o redondeados)</span>
-        </div>
+            {modoVisual === "cierre" ? (
+              <div className="leyenda-escala">
+                <span className="leyenda-bloque leyenda-bloque-resaltado" />
+                <span>Guaranda y San Marcos</span>
+              </div>
+            ) : (
+              <div className="leyenda-escala">
+                <svg width="20" height="12" aria-hidden="true">
+                  <rect
+                    width="20"
+                    height="12"
+                    rx="2"
+                    fill="url(#patron-evidencia-baja-2)"
+                    stroke="var(--color-linea)"
+                  />
+                </svg>
+                <span>Rayado: datos menos precisos</span>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {datosCultivo ? (
@@ -412,8 +631,8 @@ export function MapaCaribe({
               <th>Municipio</th>
               <th>Departamento</th>
               <th>Elegible</th>
-              <th>Brecha relativa p50 (%)</th>
-              <th>Nivel de evidencia</th>
+              <th>Brecha relativa (%)</th>
+              <th>Evidencia</th>
             </tr>
           </thead>
           <tbody>
@@ -426,9 +645,9 @@ export function MapaCaribe({
                 <td>
                   {m.brecha.brecha_relativa_pct !== null
                     ? formatearPorcentaje(m.brecha.brecha_relativa_pct)
-                    : "N/D"}
+                    : "No disponible"}
                 </td>
-                <td>{m.nivel_evidencia}</td>
+                <td>{etiquetarEvidencia(m.nivel_evidencia)}</td>
               </tr>
             ))}
           </tbody>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { geoMercator, geoPath } from "d3-geo";
 import type { FeatureCollection, Geometry } from "geojson";
-import { feature } from "topojson-client";
+import { feature, merge } from "topojson-client";
 import {
   cargarHallazgos,
   cargarSistemas,
@@ -11,7 +11,8 @@ import {
 import { usarTiendaRindex, type CultivoClave } from "../estado/tiendaRindex.ts";
 import type { ContratoHallazgos } from "../tipos/generados/hallazgos.ts";
 import type { ContratoSistemas } from "../tipos/generados/sistemas.ts";
-import { formatearEntero, formatearRangoToneladas } from "../utilidades/formato.ts";
+import { formatearEntero } from "../utilidades/formato.ts";
+import { LogoRindex } from "./LogoRindex.tsx";
 
 interface PropiedadGeo {
   codigo: string;
@@ -24,12 +25,6 @@ export interface PropsPortada {
   sistemasIniciales?: ContratoSistemas;
   topoJsonInicial?: ContratoTopoJsonCaribe;
 }
-
-const IDS_COMBINADOS: readonly string[] = [
-  "combinado_arroz",
-  "combinado_maiz",
-  "combinado_yuca",
-];
 
 const COLOR_CULTIVO_CSS: Record<CultivoClave, string> = {
   "Maíz": "var(--color-maiz)",
@@ -81,29 +76,28 @@ export function Portada({
     };
   }, [hallazgos, sistemas, topoJson]);
 
-  const rangoCombinado = useMemo(() => {
-    if (!hallazgos) {
+  const rangoTotal = useMemo(() => {
+    const t = hallazgos?.tarjetas.find((x) => x.id === "combinado_region_total");
+    if (!t || !t.intervalo || t.intervalo.length !== 2) {
       return null;
     }
-    let sumaP10 = 0;
-    let sumaP50 = 0;
-    let sumaP90 = 0;
-    let tarjetasEncontradas = 0;
+    return {
+      p10: t.intervalo[0] ?? 0,
+      p50: t.cifra,
+      p90: t.intervalo[1] ?? 0,
+    };
+  }, [hallazgos]);
 
-    for (const id of IDS_COMBINADOS) {
-      const tarjeta = hallazgos.tarjetas.find((t) => t.id === id);
-      if (tarjeta && tarjeta.intervalo && tarjeta.intervalo.length === 2) {
-        sumaP10 += tarjeta.intervalo[0] ?? 0;
-        sumaP50 += tarjeta.cifra;
-        sumaP90 += tarjeta.intervalo[1] ?? 0;
-        tarjetasEncontradas += 1;
-      }
-    }
-
-    if (tarjetasEncontradas === 0) {
+  const rangoEvidenciaAlta = useMemo(() => {
+    const t = hallazgos?.tarjetas.find((x) => x.id === "combinado_region_evidencia_alta");
+    if (!t || !t.intervalo || t.intervalo.length !== 2) {
       return null;
     }
-    return { p10: sumaP10, p50: sumaP50, p90: sumaP90 };
+    return {
+      p10: t.intervalo[0] ?? 0,
+      p50: t.cifra,
+      p90: t.intervalo[1] ?? 0,
+    };
   }, [hallazgos]);
 
   const cultivosDominantes = useMemo(() => {
@@ -138,9 +132,9 @@ export function Portada({
     return mapa;
   }, [sistemas]);
 
-  const trazosFondo = useMemo(() => {
+  const { trazosMunicipios, contornoRegional } = useMemo(() => {
     if (!topoJson) {
-      return [];
+      return { trazosMunicipios: [], contornoRegional: "" };
     }
     const colMpios = feature(
       topoJson as never,
@@ -149,48 +143,47 @@ export function Portada({
 
     const proyeccion = geoMercator().fitExtent(
       [
-        [16, 16],
-        [784, 584],
+        [24, 24],
+        [736, 596],
       ],
       colMpios,
     );
-    const generadorRuta = geoPath(proyeccion);
+    const generadorRuta = geoPath(proyeccion).digits(1);
 
-    return colMpios.features.map((feat) => {
+    const mpios = colMpios.features.map((feat) => {
       const codigo = feat.properties.codigo;
       const dom = cultivosDominantes.get(codigo);
       return {
         codigo,
         ruta: generadorRuta(feat) ?? "",
-        relleno: dom ? COLOR_CULTIVO_CSS[dom] : "var(--color-contexto-gris)",
+        relleno: dom ? COLOR_CULTIVO_CSS[dom] : "#3C5447",
       };
     });
+
+    let contorno = "";
+    try {
+      const fusion = merge(
+        topoJson as never,
+        topoJson.objects.municipios.geometries as never,
+      );
+      contorno = generadorRuta(fusion as never) ?? "";
+    } catch {
+      contorno = "";
+    }
+
+    return { trazosMunicipios: mpios, contornoRegional: contorno };
   }, [topoJson, cultivosDominantes]);
 
   return (
     <section id="portada" className="portada" aria-labelledby="titulo-portada">
-      <div className="portada-mapa-fondo" aria-hidden="true">
-        {trazosFondo.length > 0 ? (
-          <svg viewBox="0 0 800 600" role="presentation">
-            {trazosFondo.map((t) => (
-              <path
-                key={t.codigo}
-                d={t.ruta}
-                fill={t.relleno}
-                stroke="var(--color-fondo)"
-                strokeWidth="0.6"
-              />
-            ))}
-          </svg>
-        ) : null}
-      </div>
+      <div className="portada-rejilla">
+        <div className="portada-columna-texto" data-testid="portada-bloque-texto">
+          <div className="portada-marca-linea">
+            <LogoRindex sobreOscuro />
+            <span className="portada-etiqueta">Región Caribe · 2019–2025</span>
+          </div>
 
-      <div className="portada-contenido">
-        <article className="portada-tarjeta">
-          <span className="paso-etiqueta-id">
-            Región Caribe 2019–2025 · Maíz, Yuca y Arroz
-          </span>
-          <h1 id="titulo-portada" className="portada-subtitulo">
+          <h1 id="titulo-portada" className="portada-titulo">
             Dónde está la cosecha que falta
           </h1>
 
@@ -198,34 +191,126 @@ export function Portada({
             <p className="estado-error" role="alert">
               {errorCarga}
             </p>
-          ) : rangoCombinado ? (
+          ) : rangoTotal ? (
             <>
               <p className="portada-gancho" data-testid="frase-gancho-portada">
-                Sin sembrar una hectárea más, la región podría sumar entre{" "}
-                <strong className="cifra-tabular">
-                  {formatearRangoToneladas(rangoCombinado.p10, rangoCombinado.p90)}
+                Sin sembrar una hectárea más, el Caribe podría cosechar entre{" "}
+                <strong className="portada-cifra-destacada cifra-tabular">
+                  {formatearEntero(rangoTotal.p10)}
                 </strong>{" "}
-                (mediana{" "}
-                <span className="cifra-tabular">
-                  {formatearEntero(rangoCombinado.p50)} t/año
-                </span>
-                ) cerrando brechas de rendimiento y recuperando área no cosechada.
+                y{" "}
+                <strong className="portada-cifra-destacada cifra-tabular">
+                  {formatearEntero(rangoTotal.p90)}
+                </strong>{" "}
+                toneladas más al año.
               </p>
-              <p className="portada-nota">
-                {modo === "decisor"
-                  ? "Rango regional calculado sumando los escenarios combinados sin doble conteo de arroz, maíz y yuca publicados en hallazgos.json."
-                  : "Estimación bootstrap (5.000 réplicas, rango p10 a p90) obtenida mediante max(S1, S2) + S3 sobre municipios elegibles en hallazgos.json."}
+
+              {rangoEvidenciaAlta ? (
+                <p className="portada-evidencia-alta" data-testid="frase-evidencia-alta">
+                  Solo en arroz y maíz, los dos cultivos con evidencia alta, el potencial está
+                  entre{" "}
+                  <strong className="cifra-tabular">
+                    {formatearEntero(rangoEvidenciaAlta.p10)}
+                  </strong>{" "}
+                  y{" "}
+                  <strong className="cifra-tabular">
+                    {formatearEntero(rangoEvidenciaAlta.p90)}
+                  </strong>{" "}
+                  toneladas al año.
+                </p>
+              ) : null}
+
+              <p className="portada-apoyo">
+                {modo === "decisor" ? (
+                  "Siete años de datos oficiales de 195 municipios cuentan dónde está esa cosecha y quién puede recuperarla primero."
+                ) : (
+                  <>
+                    Percentiles del 10 al 90 obtenidos por suma réplica a réplica sobre 5.000
+                    réplicas de bootstrap de dos niveles sin doble conteo entre brecha,
+                    tecnificación y área no cosechada.{" "}
+                    <a href="#metodologia" className="enlace-oscuro">
+                      Ver metodología
+                    </a>
+                    .
+                  </>
+                )}
               </p>
             </>
           ) : (
-            <p className="portada-gancho">
-              Cargando estimaciones regionales desde hallazgos.json...
-            </p>
+            <p className="portada-gancho">Cargando estimaciones regionales...</p>
           )}
+
+          <a href="#narrativa-caribe" className="portada-indicador-scroll">
+            <span>Desliza para recorrer la historia</span>
+            <span aria-hidden="true">↓</span>
+          </a>
+        </div>
+
+        <div className="portada-columna-mapa" data-testid="portada-bloque-mapa">
+          {trazosMunicipios.length > 0 ? (
+            <svg
+              className="portada-mapa-svg"
+              viewBox="0 0 760 620"
+              role="img"
+              aria-label="Mapa del Caribe colombiano coloreado por cultivo dominante en cada municipio"
+            >
+              <defs>
+                <filter
+                  id="brillo-caribe-portada"
+                  x="-12%"
+                  y="-12%"
+                  width="124%"
+                  height="124%"
+                >
+                  <feDropShadow
+                    dx="0"
+                    dy="0"
+                    stdDeviation="7"
+                    floodColor="#34D27B"
+                    floodOpacity="0.34"
+                  />
+                </filter>
+              </defs>
+
+              {contornoRegional ? (
+                <path
+                  d={contornoRegional}
+                  fill="#0B2E1F"
+                  stroke="#34D27B"
+                  strokeOpacity="0.45"
+                  strokeWidth="2"
+                  filter="url(#brillo-caribe-portada)"
+                />
+              ) : null}
+
+              <g>
+                {trazosMunicipios.map((t) => (
+                  <path
+                    key={`relleno-${t.codigo}`}
+                    d={t.ruta}
+                    fill={t.relleno}
+                    stroke="none"
+                  />
+                ))}
+              </g>
+
+              <g>
+                {trazosMunicipios.map((t) => (
+                  <path
+                    key={`trazo-${t.codigo}`}
+                    d={t.ruta}
+                    fill="none"
+                    className="portada-limite-mpio"
+                    pathLength={1}
+                  />
+                ))}
+              </g>
+            </svg>
+          ) : null}
 
           <div
             className="portada-leyenda-dominante"
-            aria-label="Cultivo dominante por tonelaje en el mapa de fondo"
+            aria-label="Cultivo dominante por tonelaje en el mapa de portada"
           >
             <span className="portada-item-leyenda">
               <span
@@ -233,7 +318,7 @@ export function Portada({
                 style={{ backgroundColor: "var(--color-maiz)" }}
                 aria-hidden="true"
               />
-              Maíz dominante (t)
+              Maíz dominante
             </span>
             <span className="portada-item-leyenda">
               <span
@@ -241,7 +326,7 @@ export function Portada({
                 style={{ backgroundColor: "var(--color-yuca)" }}
                 aria-hidden="true"
               />
-              Yuca dominante (t)
+              Yuca dominante
             </span>
             <span className="portada-item-leyenda">
               <span
@@ -249,16 +334,13 @@ export function Portada({
                 style={{ backgroundColor: "var(--color-arroz)" }}
                 aria-hidden="true"
               />
-              Arroz dominante (t)
+              Arroz dominante
             </span>
           </div>
-
-          <a href="#narrativa-caribe" className="portada-indicador-scroll">
-            <span>Desliza para recorrer la historia</span>
-            <span aria-hidden="true">↓</span>
-          </a>
-        </article>
+        </div>
       </div>
+
+      <div className="portada-degradado-salida" aria-hidden="true" />
     </section>
   );
 }

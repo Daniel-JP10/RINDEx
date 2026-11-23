@@ -4,9 +4,18 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from rindex.brecha import calcular_brecha_potencial, simular_brecha_bootstrap_unidad
+from rindex.brecha import (
+    calcular_brecha_potencial,
+    calcular_brecha_potencial_con_replicas,
+    simular_brecha_bootstrap_unidad,
+)
 from rindex.config import ConfiguracionEdicion, validar_diccionario_config
-from rindex.escenarios import combinar_escenarios_sin_doble_conteo, evaluar_s1_lineal
+from rindex.escenarios import (
+    combinar_escenarios_sin_doble_conteo,
+    construir_escenarios_con_replicas,
+    evaluar_s1_lineal,
+    resumir_suma_replicas,
+)
 from rindex.evidencia import clasificar_nivel_evidencia_cultivo
 from rindex.prioridad import generar_pesos_dirichlet
 from test_config import config_base_valida
@@ -199,3 +208,52 @@ def test_clasificacion_nivel_evidencia_cultivo_reglas_d9() -> None:
     assert clasificar_nivel_evidencia_cultivo(19.0, 37.3, cfg) == "alto"
     assert clasificar_nivel_evidencia_cultivo(30.0, 60.0, cfg) == "medio"
     assert clasificar_nivel_evidencia_cultivo(45.8, 91.1, cfg) == "bajo"
+
+
+def test_suma_replicas_independientes_acota_percentiles_frente_a_suma_de_percentiles() -> None:
+    # Con municipios independientes y ganancias positivas:
+    # p10(suma) >= sum(p10) y p90(suma) <= sum(p90)
+    rng = np.random.default_rng(2026)
+    n_municipios = 25
+    n_replicas = 5000
+    matriz = rng.lognormal(mean=4.0, sigma=0.45, size=(n_municipios, n_replicas))
+    assert np.all(matriz > 0.0)
+
+    p10_mpio = np.quantile(matriz, 0.10, axis=1)
+    p90_mpio = np.quantile(matriz, 0.90, axis=1)
+
+    p10_suma, p50_suma, p90_suma = resumir_suma_replicas(matriz)
+
+    assert p10_suma >= float(p10_mpio.sum())
+    assert p90_suma <= float(p90_mpio.sum())
+    assert p10_suma < p50_suma < p90_suma
+
+    # Verificacion de punta a punta sobre construir_escenarios_con_replicas
+    cfg = _cfg_prueba()
+    df_per_sis, df_anual_sis = _construir_tablas_sistema_sinteticas(
+        rendimientos_depto_08=[1.0, 1.4, 1.8, 2.2, 4.0],
+        rendimientos_depto_13=[1.2, 1.6, 2.0, 2.5, 4.2],
+    )
+    df_per_cul = df_per_sis.drop(columns=["sistema"]).copy()
+    df_anual_cul = df_anual_sis.drop(columns=["sistema"]).copy()
+
+    df_brecha, rep_s1 = calcular_brecha_potencial_con_replicas(
+        df_per_sis, df_anual_sis, cfg, replicas_boot=1000
+    )
+    df_esc, df_reg, df_agreg, df_rep = construir_escenarios_con_replicas(
+        periodo_mpio_cultivo=df_per_cul,
+        periodo_mpio_sistema=df_per_sis,
+        anual_mpio_cultivo=df_anual_cul,
+        anual_mpio_sistema=df_anual_sis,
+        df_brecha=df_brecha,
+        cfg=cfg,
+        replicas_boot=1000,
+        replicas_s1=rep_s1,
+    )
+    fila_reg = df_reg.loc[df_reg["cultivo"] == "Maíz"].iloc[0]
+    assert float(fila_reg["s1_p10"]) >= float(df_esc["s1_p10"].sum()) - 1e-6
+    assert float(fila_reg["s1_p90"]) <= float(df_esc["s1_p90"].sum()) + 1e-6
+    assert float(fila_reg["combinado_p10"]) >= float(df_esc["combinado_p10"].sum()) - 1e-6
+    assert float(fila_reg["combinado_p90"]) <= float(df_esc["combinado_p90"].sum()) + 1e-6
+    assert len(df_rep) == len(df_esc) * 1000
+    assert set(df_agreg["grupo"]) == {"region_total", "evidencia_alta"}

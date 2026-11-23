@@ -2,8 +2,8 @@
 
 - **Fuente leída directamente**: `data/raw/eva_2019_2025.xlsx`
 - **Dependencias utilizadas**: `pandas`, `numpy`, `scipy` (sin importar ningún módulo de `rindex`)
-- **Total de verificaciones ejecutadas**: `93`
-- **Verificaciones aprobadas**: `93 / 93`
+- **Total de verificaciones ejecutadas**: `96`
+- **Verificaciones aprobadas**: `96 / 96`
 - **Estado global de la auditoría**: **APROBADA**
 
 ## Detalle de comparaciones contra `regional.json` y `hallazgos.json`
@@ -102,4 +102,7 @@
 | Kruskal-Wallis (H4) | h4_arroz epsilon_cuadrado (H=34.61, n=86) | 0.4071 | 0.4071 | 0.000026 | `<= 0.01` | **OK** |
 | Kruskal-Wallis (H4) | h4_maiz epsilon_cuadrado (H=19.09, n=180) | 0.1066 | 0.1066 | 0.000023 | `<= 0.01` | **OK** |
 | Kruskal-Wallis (H4) | h4_yuca epsilon_cuadrado (H=5.08, n=172) | 0.0297 | 0.0297 | 0.000035 | `<= 0.01` | **OK** |
-| Escenario S1 Maiz (puntual vs p50) | Ganancia regional anual S1 Maiz (t/anio, dif. relativa %) | 114004.3000 | 112180.0000 | 1.6262 % | `<= 2.0 %` | **OK** |
+| Escenario S1 Maiz (puntual vs p50) | Ganancia regional anual S1 Maiz (t/anio, dif. relativa %) | 114004.3000 | 116955.0000 | 2.5229 % | `<= 3.0 % y en [p10; p90]` | **OK** |
+| Total regional combinado (D10) | Total regional combinado (3 cultivos, dif. relativa %) | 693970.3500 | 707489.0000 | 1.9108 % | `<= 3.0 % y acotado vs suma percentiles` | **OK** |
+| Total regional combinado (D10) | Total regional combinado evidencia alta (Arroz y Maiz, dif. relativa %) | 463609.2300 | 470927.0000 | 1.5539 % | `<= 3.0 % y acotado vs suma percentiles` | **OK** |
+| Estructura sistemas Maiz | Porcentaje area cosechada Maiz tradicional (%) | 73.5000 | 73.5000 | 0.000000 | `<= 0.1` | **OK** |

@@ -652,6 +652,8 @@ def construir_hallazgos_json(
     arroz_2021: pd.DataFrame,
     escenarios_regionales: pd.DataFrame,
     prioridad: pd.DataFrame,
+    escenarios_totales_agregados: pd.DataFrame,
+    resumen_sistemas_maiz: pd.DataFrame,
 ) -> dict[str, Any]:
     mapa_hip = {str(f["id_hipotesis"]): f for f in resumen_hipotesis.to_dict(orient="records")}
     mapa_d7 = {str(f["id_hipotesis"]): f for f in sensibilidad_d7.to_dict(orient="records")}
@@ -1084,6 +1086,111 @@ def construir_hallazgos_json(
             }
         )
 
+    # Totales regionales agregados por suma replica a replica (D10)
+    mapa_agreg = {
+        str(f["grupo"]): f for f in escenarios_totales_agregados.to_dict(orient="records")
+    }
+    f_tot = mapa_agreg["region_total"]
+    tarjetas.append(
+        {
+            "id": "combinado_region_total",
+            "cultivo": "Todos",
+            "texto_decisor": (
+                f"Sin sembrar una hectárea más, el Caribe podría cosechar entre "
+                f"{_ent(f_tot['combinado_p10']):,} y {_ent(f_tot['combinado_p90']):,} "
+                f"toneladas más al año sumando arroz, maíz y yuca."
+            ).replace(",", "."),
+            "texto_tecnico": (
+                "Percentiles p10, p50 y p90 calculados sobre la suma réplica a réplica "
+                "(5.000 réplicas bootstrap con índice común) de los tres cultivos."
+            ),
+            "cifra": float(_ent(f_tot["combinado_p50"])),
+            "unidad": "toneladas",
+            "intervalo": [
+                float(_ent(f_tot["combinado_p10"])),
+                float(_ent(f_tot["combinado_p90"])),
+            ],
+            "n": int(f_tot["municipios_elegibles"]),
+            "prueba": "Suma réplica a réplica de bootstrap de dos niveles",
+            "p_ajustado": None,
+            "robustez": "firme",
+            "nivel_evidencia": "medio",
+            "origen": {
+                "parquet": "resultados/escenarios_totales_agregados.parquet",
+                "funcion": "rindex.escenarios.construir_escenarios_con_replicas",
+                "columna_cifra": "combinado_p50",
+                "filtro": "grupo=region_total",
+            },
+        }
+    )
+
+    f_ev_alta = mapa_agreg["evidencia_alta"]
+    tarjetas.append(
+        {
+            "id": "combinado_region_evidencia_alta",
+            "cultivo": "Arroz y Maíz",
+            "texto_decisor": (
+                f"Solo en los cultivos con evidencia alta (arroz y maíz), el potencial anual "
+                f"se ubica entre {_ent(f_ev_alta['combinado_p10']):,} y "
+                f"{_ent(f_ev_alta['combinado_p90']):,} toneladas."
+            ).replace(",", "."),
+            "texto_tecnico": (
+                "Percentiles p10, p50 y p90 calculados sobre la suma réplica a réplica "
+                "(5.000 réplicas bootstrap con índice común) excluyendo yuca."
+            ),
+            "cifra": float(_ent(f_ev_alta["combinado_p50"])),
+            "unidad": "toneladas",
+            "intervalo": [
+                float(_ent(f_ev_alta["combinado_p10"])),
+                float(_ent(f_ev_alta["combinado_p90"])),
+            ],
+            "n": int(f_ev_alta["municipios_elegibles"]),
+            "prueba": "Suma réplica a réplica de bootstrap de dos niveles",
+            "p_ajustado": None,
+            "robustez": "firme",
+            "nivel_evidencia": "alto",
+            "origen": {
+                "parquet": "resultados/escenarios_totales_agregados.parquet",
+                "funcion": "rindex.escenarios.construir_escenarios_con_replicas",
+                "columna_cifra": "combinado_p50",
+                "filtro": "grupo=evidencia_alta",
+            },
+        }
+    )
+
+    f_maiz_trad = resumen_sistemas_maiz.loc[resumen_sistemas_maiz["sistema"] == "tradicional"].iloc[
+        0
+    ]
+    pct_trad = _pct(f_maiz_trad["pct_area_cosechada"]) or 0.0
+    tarjetas.append(
+        {
+            "id": "pct_area_maiz_tradicional",
+            "cultivo": "Maíz",
+            "texto_decisor": (
+                f"El {pct_trad:.1f} % del área cosechada de maíz en el Caribe corresponde "
+                "al sistema tradicional."
+            ).replace(".", ","),
+            "texto_tecnico": (
+                "Proporción de área cosechada acumulada 2019-2025 en maíz tradicional "
+                "sobre el total de área cosechada de maíz en los siete departamentos."
+            ),
+            "cifra": pct_trad,
+            "unidad": "porcentaje",
+            "intervalo": None,
+            "n": int(f_maiz_trad["municipios_con_dato"]),
+            "prueba": "Descriptivo ponderado por área cosechada acumulada",
+            "p_ajustado": None,
+            "robustez": "firme",
+            "nivel_evidencia": mapa_ev.get("Maíz", "alto"),
+            "origen": {
+                "parquet": "resultados/resumen_sistemas_maiz.parquet",
+                "funcion": "rindex.priorizacion.calcular_resumen_sistemas_maiz",
+                "columna_cifra": "pct_area_cosechada",
+                "filtro": "sistema=tradicional",
+            },
+        }
+    )
+
     return {"version_esquema": VERSION_ESQUEMA, "tarjetas": tarjetas}
 
 
@@ -1232,6 +1339,8 @@ def _generar_diccionario_archivos_web(
     arroz_2021 = pd.read_parquet(dir_res / "arroz_2021_concentracion.parquet")
     df_escenarios = pd.read_parquet(dir_res / "escenarios.parquet")
     df_totales_esc = pd.read_parquet(dir_res / "escenarios_regionales.parquet")
+    df_totales_agreg = pd.read_parquet(dir_res / "escenarios_totales_agregados.parquet")
+    df_resumen_maiz = pd.read_parquet(dir_res / "resumen_sistemas_maiz.parquet")
     df_prioridad = pd.read_parquet(dir_res / "prioridad.parquet")
 
     topo = json.loads(ruta_topojson.read_text(encoding="utf-8"))
@@ -1265,6 +1374,8 @@ def _generar_diccionario_archivos_web(
             arroz_2021=arroz_2021,
             escenarios_regionales=df_totales_esc,
             prioridad=df_prioridad,
+            escenarios_totales_agregados=df_totales_agreg,
+            resumen_sistemas_maiz=df_resumen_maiz,
         ),
         "calidad.json": construir_calidad_json(
             evidencia_cultivo=evidencia_cultivo,

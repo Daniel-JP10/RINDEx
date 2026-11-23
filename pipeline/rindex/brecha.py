@@ -48,19 +48,19 @@ def simular_brecha_bootstrap_unidad(
     return brechas_boot, ganancias_boot
 
 
-def calcular_brecha_potencial(
+def calcular_brecha_potencial_con_replicas(
     periodo_mpio_sistema: pd.DataFrame,
     anual_mpio_sistema: pd.DataFrame,
     cfg: ConfiguracionEdicion,
     replicas_boot: int | None = None,
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, dict[tuple[str, str, str], np.ndarray]]:
     replicas = replicas_boot if replicas_boot is not None else cfg.parametros.replicas_bootstrap
     min_mpios_depto = cfg.priorizacion.minimo_municipios_referencia_depto
     pct_ref = cfg.priorizacion.percentil_referencia
 
     elegibles = periodo_mpio_sistema.loc[periodo_mpio_sistema["elegible_500"]].copy()
     if elegibles.empty:
-        return pd.DataFrame()
+        return pd.DataFrame(), {}
 
     elegibles = elegibles.sort_values(
         ["cultivo", "sistema", "codigo_dane_departamento", "codigo_dane_municipio"]
@@ -98,6 +98,7 @@ def calcular_brecha_potencial(
         )
 
     filas_out: list[dict[str, object]] = []
+    replicas_s1: dict[tuple[str, str, str], np.ndarray] = {}
     semilla_base = cfg.parametros.semilla_aleatoria + 1000
 
     for idx, fila in enumerate(elegibles.to_dict(orient="records")):
@@ -127,6 +128,7 @@ def calcular_brecha_potencial(
         if brecha_puntual <= 0.0:
             b_p10, b_p50, b_p90 = 0.0, 0.0, 0.0
             g_p10, g_p50, g_p90 = 0.0, 0.0, 0.0
+            ganancias_b = np.zeros(replicas, dtype=float)
         else:
             areas_h, prods_h = historial_anual.get(
                 (mpio, cult, sis),
@@ -143,6 +145,8 @@ def calcular_brecha_potencial(
             )
             b_p10, b_p50, b_p90 = (float(v) for v in np.quantile(brechas_b, [0.10, 0.50, 0.90]))
             g_p10, g_p50, g_p90 = (float(v) for v in np.quantile(ganancias_b, [0.10, 0.50, 0.90]))
+
+        replicas_s1[(mpio, cult, sis)] = ganancias_b
 
         registro = dict(fila)
         registro.update(
@@ -164,4 +168,19 @@ def calcular_brecha_potencial(
         )
         filas_out.append(registro)
 
-    return pd.DataFrame(filas_out)
+    return pd.DataFrame(filas_out), replicas_s1
+
+
+def calcular_brecha_potencial(
+    periodo_mpio_sistema: pd.DataFrame,
+    anual_mpio_sistema: pd.DataFrame,
+    cfg: ConfiguracionEdicion,
+    replicas_boot: int | None = None,
+) -> pd.DataFrame:
+    df_brecha, _ = calcular_brecha_potencial_con_replicas(
+        periodo_mpio_sistema=periodo_mpio_sistema,
+        anual_mpio_sistema=anual_mpio_sistema,
+        cfg=cfg,
+        replicas_boot=replicas_boot,
+    )
+    return df_brecha

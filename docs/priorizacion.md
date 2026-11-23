@@ -5,7 +5,7 @@
 - **Umbral de elegibilidad**: `500 ha` y `4` años con dato
 - **Pesos por defecto del índice (0-100)**: ganancia `0,40`, brecha relativa `0,30`, estabilidad `0,15`, confiabilidad `0,15`
 - **Sensibilidad de pesos**: `2.000` juegos Dirichlet(1, 1, 1, 1) con semilla `2026`
-- **Tiempo total de ejecución**: `5,94 s`
+- **Tiempo total de ejecución**: `14,53 s`
 
 ## 1. Validaciones cruzadas de consistencia matemática
 
@@ -30,17 +30,17 @@
 
 | Cultivo | Producción anual media (t) | S1 Cierre brecha $p_{50}$ (`[p10; p90]`) | S1 % prod. | S2 Tecnificación $p_{50}$ (`[p10; p90]`) | S2 % prod. | % S2 extrapolado | S3 Área no cosechada $p_{50}$ (`[p10; p90]`) | Combinado sin doble conteo $p_{50}$ (`[p10; p90]`) | Combinado % prod. |
 | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| **Arroz** | 564.802,84 | 80.340,44 (`[29.622,87; 138.253,79]`) | 14,22 % | 59.867,35 (`[45.167,96; 76.464,99]`) | 10,60 % | 41,48 % | 43.767,91 (`[12.045,37; 85.174,26]`) | 148.830,77 (`[68.864,82; 251.976,35]`) | 26,35 % |
-| **Maíz** | 621.552,04 | 112.180,26 (`[58.919,53; 182.114,13]`) | 18,05 % | 247.560,24 (`[195.694,36; 303.328,12]`) | 39,83 % | 55,81 % | 36.199,15 (`[11.831,39; 71.392,15]`) | 304.654,64 (`[217.930,26; 413.958,81]`) | 49,02 % |
-| **Yuca** | 1.331.408,09 | 223.911,39 (`[114.900,55; 386.087,74]`) | 16,82 % | 0,00 (`[0,00; 0,00]`) | 0,00 % | 0,00 % | 0,00 (`[0,00; 0,00]`) | 223.911,39 (`[114.900,55; 386.087,74]`) | 16,82 % |
+| **Arroz** | 564.802,84 | 83.029,83 (`[69.205,42; 100.446,96]`) | 14,70 % | 60.400,03 (`[57.448,87; 63.562,55]`) | 10,69 % | 41,48 % | 45.344,23 (`[34.133,62; 60.315,68]`) | 156.841,58 (`[138.154,79; 178.932,89]`) | 27,77 % |
+| **Maíz** | 621.552,04 | 116.954,67 (`[110.229,30; 123.808,98]`) | 18,82 % | 248.683,10 (`[242.694,04; 254.855,18]`) | 40,01 % | 55,81 % | 39.195,93 (`[34.982,77; 43.957,79]`) | 313.870,35 (`[305.975,57; 322.441,49]`) | 50,50 % |
+| **Yuca** | 1.331.408,09 | 236.440,74 (`[220.270,90; 252.771,80]`) | 17,76 % | 0,00 (`[0,00; 0,00]`) | 0,00 % | 0,00 % | 0,00 (`[0,00; 0,00]`) | 236.440,74 (`[220.270,90; 252.771,80]`) | 17,76 % |
 
 ### 3.1. Comparación de la ganancia regional de S1 al 100 % frente a la estimación inicial de referencia
 
 | Cultivo | Ganancia S1 $p_{50}$ (% prod. anual media) | Estimación inicial de referencia (%) | Diferencia (puntos porcentuales) | Explicación metodológica |
 | :--- | ---: | ---: | ---: | :--- |
-| Arroz | 14,22 % | 27,00 % | -12,78 pp | La diferencia supera 5 puntos porque S1 se evalúa estrictamente dentro de cada departamento y sistema productivo (evitando comparar secano manual contra riego o tradicional contra tecnificado en el mismo grupo de referencia $P_{75}$) y pondera por el área media anual de los sistemas elegibles (>= 500 ha). |
-| Maíz | 18,05 % | 19,00 % | -0,95 pp | Diferencia menor o igual a 5 puntos porcentuales; consistente con la estimación inicial. |
-| Yuca | 16,82 % | 16,00 % | 0,82 pp | Diferencia menor o igual a 5 puntos porcentuales; consistente con la estimación inicial. |
+| Arroz | 14,70 % | 27,00 % | -12,30 pp | La diferencia supera 5 puntos porque S1 se evalúa estrictamente dentro de cada departamento y sistema productivo (evitando comparar secano manual contra riego o tradicional contra tecnificado en el mismo grupo de referencia $P_{75}$) y pondera por el área media anual de los sistemas elegibles (>= 500 ha). |
+| Maíz | 18,82 % | 19,00 % | -0,18 pp | Diferencia menor o igual a 5 puntos porcentuales; consistente con la estimación inicial. |
+| Yuca | 17,76 % | 16,00 % | 1,76 pp | Diferencia menor o igual a 5 puntos porcentuales; consistente con la estimación inicial. |
 
 ## 4. Tipología para la matriz de decisión: municipios elegibles por cuadrante y cultivo
 

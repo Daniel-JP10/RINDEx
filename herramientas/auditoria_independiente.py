@@ -28,7 +28,10 @@ MAPEO_SISTEMAS: dict[str, tuple[str, str]] = {
 
 TOLERANCIA_TOTALES = 1e-6
 TOLERANCIA_ESTADISTICOS = 0.01
-TOLERANCIA_S1_RELATIVA_PCT = 2.0
+# Tolerancia relativa para comparar estimacion puntual vs p50 de suma replica a replica (D10)
+TOLERANCIA_S1_RELATIVA_PCT = 3.0
+TOLERANCIA_COMBINADO_RELATIVA_PCT = 3.0
+TOLERANCIA_PORCENTAJE_DESC = 0.1
 
 
 def _hodges_lehmann_razon(diffs_log: np.ndarray) -> float:
@@ -278,29 +281,29 @@ def ejecutar_auditoria_independiente(
             }
         )
 
-    # 5. Ganancia regional puntual de S1 en maiz sin bootstrap frente a p50
-    anual_mpio_sis_maiz = (
-        df.loc[(df["cultivo"] == "Maíz") & (df["area_cosechada"] > 0)]
-        .groupby(["cod_depto", "cod_mpio", "sistema", "anio"], as_index=False)
+    # 5. Ganancia regional puntual de S1 en maiz sin bootstrap frente a p50 y rango [p10; p90]
+    anual_mpio_sis_todos = (
+        df.loc[df["area_cosechada"] > 0]
+        .groupby(["cod_depto", "cod_mpio", "cultivo", "sistema", "anio"], as_index=False)
         .agg(
             area_cosechada=("area_cosechada", "sum"),
             produccion=("produccion", "sum"),
         )
     )
-    per_sis_maiz = anual_mpio_sis_maiz.groupby(
-        ["cod_depto", "cod_mpio", "sistema"], as_index=False
+    per_sis_todos = anual_mpio_sis_todos.groupby(
+        ["cod_depto", "cod_mpio", "cultivo", "sistema"], as_index=False
     ).agg(
         area_cosechada=("area_cosechada", "sum"),
         produccion=("produccion", "sum"),
         anios_con_dato=("anio", "nunique"),
     )
-    per_sis_maiz["rendimiento"] = per_sis_maiz["produccion"] / per_sis_maiz["area_cosechada"]
-    eleg_sis_maiz = per_sis_maiz.loc[
-        (per_sis_maiz["area_cosechada"] >= 500.0) & (per_sis_maiz["anios_con_dato"] >= 4)
+    per_sis_todos["rendimiento"] = per_sis_todos["produccion"] / per_sis_todos["area_cosechada"]
+    eleg_sis_todos = per_sis_todos.loc[
+        (per_sis_todos["area_cosechada"] >= 500.0) & (per_sis_todos["anios_con_dato"] >= 4)
     ].copy()
 
-    ganancia_puntual_s1_maiz = 0.0
-    for _, sub_sis in eleg_sis_maiz.groupby("sistema"):
+    s1_puntual_mpio: dict[tuple[str, str], float] = {}
+    for (cult_s, _sis_s), sub_sis in eleg_sis_todos.groupby(["cultivo", "sistema"]):
         p75_reg = float(np.percentile(sub_sis["rendimiento"], 75.0))
         conteos_dep = sub_sis.groupby("cod_depto")["cod_mpio"].count().to_dict()
         p75_dep = {
@@ -309,13 +312,22 @@ def ejecutar_auditoria_independiente(
         }
         for fila_s in sub_sis.to_dict(orient="records"):
             dep = str(fila_s["cod_depto"])
+            mpio = str(fila_s["cod_mpio"])
             y_ref = p75_dep[dep] if int(conteos_dep.get(dep, 0)) >= 5 else p75_reg
             brecha_u = max(0.0, y_ref - float(fila_s["rendimiento"]))
             area_media = float(fila_s["area_cosechada"]) / float(fila_s["anios_con_dato"])
-            ganancia_puntual_s1_maiz += brecha_u * area_media
+            s1_puntual_mpio[(mpio, str(cult_s))] = (
+                s1_puntual_mpio.get((mpio, str(cult_s)), 0.0) + brecha_u * area_media
+            )
 
-    s1_p50_pub = float(mapa_tarjetas["s1_maiz"]["cifra"])
+    ganancia_puntual_s1_maiz = sum(
+        val for (_, c_k), val in s1_puntual_mpio.items() if c_k == "Maíz"
+    )
+    tar_s1_maiz = mapa_tarjetas["s1_maiz"]
+    s1_p50_pub = float(tar_s1_maiz["cifra"])
+    s1_ic = tar_s1_maiz["intervalo"]
     dif_rel_s1_pct = abs(ganancia_puntual_s1_maiz - s1_p50_pub) / s1_p50_pub * 100.0
+    dentro_rango_s1 = float(s1_ic[0]) <= ganancia_puntual_s1_maiz <= float(s1_ic[1])
     filas_comparacion.append(
         {
             "categoria": "Escenario S1 Maiz (puntual vs p50)",
@@ -323,8 +335,142 @@ def ejecutar_auditoria_independiente(
             "valor_auditoria": round(ganancia_puntual_s1_maiz, 2),
             "valor_publicado": s1_p50_pub,
             "diferencia": round(dif_rel_s1_pct, 4),
-            "tolerancia": f"<= {TOLERANCIA_S1_RELATIVA_PCT} %",
-            "cumple": dif_rel_s1_pct <= TOLERANCIA_S1_RELATIVA_PCT,
+            "tolerancia": f"<= {TOLERANCIA_S1_RELATIVA_PCT} % y en [p10; p90]",
+            "cumple": (dif_rel_s1_pct <= TOLERANCIA_S1_RELATIVA_PCT) and dentro_rango_s1,
+        }
+    )
+
+    # 6. Verificacion independiente del total regional combinado (3 cultivos y evidencia alta, D10)
+    per_cul_tot = anual_mpio_cult.groupby(["cod_depto", "cod_mpio", "cultivo"], as_index=False).agg(
+        area_sembrada=("area_sembrada", "sum"),
+        area_cosechada=("area_cosechada", "sum"),
+        produccion=("produccion", "sum"),
+    )
+    anios_cul_pos = (
+        anual_pos.groupby(["cod_depto", "cod_mpio", "cultivo"])["anio"]
+        .nunique()
+        .reset_index(name="anios_con_dato")
+    )
+    per_cul_tot = per_cul_tot.merge(
+        anios_cul_pos, on=["cod_depto", "cod_mpio", "cultivo"], how="left"
+    )
+    per_cul_tot["anios_con_dato"] = per_cul_tot["anios_con_dato"].fillna(0).astype(int)
+    eleg_cul_tot = per_cul_tot.loc[
+        (per_cul_tot["area_cosechada"] >= 500.0) & (per_cul_tot["anios_con_dato"] >= 4)
+    ].copy()
+
+    mapa_per_sis_aud = {
+        (str(f["cod_mpio"]), str(f["cultivo"]), str(f["sistema"])): f
+        for f in per_sis_todos.to_dict(orient="records")
+    }
+    hl_por_id = {
+        str(fila_c["metrica"]).split(" ", maxsplit=1)[0]: float(fila_c["valor_auditoria"])
+        for fila_c in filas_comparacion
+        if fila_c["categoria"] == "Razon Hodges-Lehmann (H2/H3)"
+    }
+    razon_h2_aud = hl_por_id["h2_maiz_tecnificado"]
+    razon_h3_aud = hl_por_id["h3_arroz_mecanizado_vs_manual"]
+
+    comb_puntual_cult: dict[str, float] = {"Arroz": 0.0, "Maíz": 0.0, "Yuca": 0.0}
+    for fila_e in eleg_cul_tot.to_dict(orient="records"):
+        mpio_e = str(fila_e["cod_mpio"])
+        cult_e = str(fila_e["cultivo"])
+        s1_u = s1_puntual_mpio.get((mpio_e, cult_e), 0.0)
+        s2_u = 0.0
+        if cult_e in {"Maíz", "Arroz"}:
+            sis_o = "tradicional" if cult_e == "Maíz" else "secano_manual"
+            sis_d = "tecnificado" if cult_e == "Maíz" else "secano_mecanizado"
+            info_o = mapa_per_sis_aud.get((mpio_e, cult_e, sis_o))
+            if info_o is not None and float(info_o["area_cosechada"]) > 0.0:
+                area_o_m = float(info_o["area_cosechada"]) / float(info_o["anios_con_dato"])
+                info_d = mapa_per_sis_aud.get((mpio_e, cult_e, sis_d))
+                if (
+                    info_d is not None
+                    and float(info_d["area_cosechada"]) > 0.0
+                    and int(info_d["anios_con_dato"]) >= 2
+                ):
+                    delta_r = max(0.0, float(info_d["rendimiento"]) - float(info_o["rendimiento"]))
+                else:
+                    razon_u = razon_h2_aud if cult_e == "Maíz" else razon_h3_aud
+                    delta_r = float(info_o["rendimiento"]) * (razon_u - 1.0)
+                s2_u = area_o_m * delta_r
+
+        s3_u = 0.0
+        if (
+            cult_e in {"Arroz", "Maíz"}
+            and float(fila_e["area_sembrada"]) >= float(fila_e["area_cosechada"])
+            and float(fila_e["area_cosechada"]) > 0.0
+        ):
+            no_cos_m = (float(fila_e["area_sembrada"]) - float(fila_e["area_cosechada"])) / float(
+                fila_e["anios_con_dato"]
+            )
+            rend_m = float(fila_e["produccion"]) / float(fila_e["area_cosechada"])
+            s3_u = no_cos_m * rend_m
+
+        comb_puntual_cult[cult_e] += max(s1_u, s2_u) + s3_u
+
+    comb_puntual_ev_alta = comb_puntual_cult["Arroz"] + comb_puntual_cult["Maíz"]
+    comb_puntual_total = comb_puntual_ev_alta + comb_puntual_cult["Yuca"]
+
+    for id_tar_comb, val_puntual, ids_componentes, etiqueta_comb in [
+        (
+            "combinado_region_total",
+            comb_puntual_total,
+            ("combinado_arroz", "combinado_maiz", "combinado_yuca"),
+            "Total regional combinado (3 cultivos, dif. relativa %)",
+        ),
+        (
+            "combinado_region_evidencia_alta",
+            comb_puntual_ev_alta,
+            ("combinado_arroz", "combinado_maiz"),
+            "Total regional combinado evidencia alta (Arroz y Maiz, dif. relativa %)",
+        ),
+    ]:
+        tar_c = mapa_tarjetas[id_tar_comb]
+        p50_pub = float(tar_c["cifra"])
+        p10_pub, p90_pub = float(tar_c["intervalo"][0]), float(tar_c["intervalo"][1])
+        suma_p10_comp = sum(float(mapa_tarjetas[k]["intervalo"][0]) for k in ids_componentes)
+        suma_p90_comp = sum(float(mapa_tarjetas[k]["intervalo"][1]) for k in ids_componentes)
+        dif_rel_c = abs(val_puntual - p50_pub) / p50_pub * 100.0
+        acotado_ok = (
+            p10_pub >= suma_p10_comp
+            and p90_pub <= suma_p90_comp
+            and p10_pub <= val_puntual <= p90_pub
+        )
+        filas_comparacion.append(
+            {
+                "categoria": "Total regional combinado (D10)",
+                "metrica": etiqueta_comb,
+                "valor_auditoria": round(val_puntual, 2),
+                "valor_publicado": p50_pub,
+                "diferencia": round(dif_rel_c, 4),
+                "tolerancia": (
+                    f"<= {TOLERANCIA_COMBINADO_RELATIVA_PCT} % y acotado vs suma percentiles"
+                ),
+                "cumple": (dif_rel_c <= TOLERANCIA_COMBINADO_RELATIVA_PCT) and acotado_ok,
+            }
+        )
+
+    # 7. Participacion del area cosechada de maiz tradicional
+    maiz_sis_tot = (
+        per_sis_todos.loc[per_sis_todos["cultivo"] == "Maíz"]
+        .groupby("sistema")["area_cosechada"]
+        .sum()
+    )
+    pct_maiz_trad_calc = round(
+        float(maiz_sis_tot["tradicional"]) / float(maiz_sis_tot.sum()) * 100.0, 1
+    )
+    pct_maiz_trad_pub = float(mapa_tarjetas["pct_area_maiz_tradicional"]["cifra"])
+    dif_maiz_trad = abs(pct_maiz_trad_calc - pct_maiz_trad_pub)
+    filas_comparacion.append(
+        {
+            "categoria": "Estructura sistemas Maiz",
+            "metrica": "Porcentaje area cosechada Maiz tradicional (%)",
+            "valor_auditoria": pct_maiz_trad_calc,
+            "valor_publicado": pct_maiz_trad_pub,
+            "diferencia": round(dif_maiz_trad, 4),
+            "tolerancia": f"<= {TOLERANCIA_PORCENTAJE_DESC}",
+            "cumple": dif_maiz_trad <= TOLERANCIA_PORCENTAJE_DESC,
         }
     )
 
@@ -354,9 +500,12 @@ def ejecutar_auditoria_independiente(
 
     for fila in df_res.to_dict(orient="records"):
         estado_txt = "OK" if bool(fila["cumple"]) else "FALLO"
-        es_s1 = fila["categoria"] == "Escenario S1 Maiz (puntual vs p50)"
+        es_rel = fila["categoria"] in {
+            "Escenario S1 Maiz (puntual vs p50)",
+            "Total regional combinado (D10)",
+        }
         dif_txt = (
-            f"{float(fila['diferencia']):.4f} %" if es_s1 else f"{float(fila['diferencia']):.6f}"
+            f"{float(fila['diferencia']):.4f} %" if es_rel else f"{float(fila['diferencia']):.6f}"
         )
         lineas.append(
             f"| {fila['categoria']} | {fila['metrica']} | "
