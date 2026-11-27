@@ -18,4 +18,4 @@ guion_narrativo.md
 web/capturas/
 web/test-results/
 web/playwright-report/
-web/debug.log
+debug.log
